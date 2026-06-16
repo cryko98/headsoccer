@@ -1,6 +1,6 @@
 /* ============================================================================
  *  game.js — engine: setup, loop, camera, vision, interactions, sabotage,
- *  meetings and win conditions.
+ *  cameras, minimap, meetings and win conditions.
  * ========================================================================== */
 
 const Game = (() => {
@@ -9,125 +9,131 @@ const Game = (() => {
   let last = 0;
 
   const S = {
-    phase: 'menu',                  // menu | role | play | task | meeting | over
-    rolePref: 'random',
+    phase: 'menu',                 // menu | role | play | task | meeting | over
+    map: null,
     crew: [], corpses: [],
     player: null,
     cam: { x: 0, y: 0 },
-    sabotage: { type: null, timer: 0 },
-    sabotageCool: 0,
-    botSabotageTimer: 45,
-    emergencyCool: 0,
+    sabotage: { type: null, timer: 0, fixPoints: [] },
+    sabotageCool: 0, botSabotageTimer: 45,
+    commsDown: false,
     roleRevealT: 0,
-    overText: '', overWin: false,
-    winner: null,
-    hint: '',
+    camerasOpen: false, minimapOpen: false,
+    overWin: false, overText: '',
+    hintCtx: null, hint: '',
+    _accused: null, _taskFlash: 0,
   };
 
-  // ---------------------------------------------------------------- setup ---
   function init(cv) {
     canvas = cv; ctx = canvas.getContext('2d');
     canvas.width = VW; canvas.height = VH;
-    GameMap.build(); Tasks.init(); Meeting.init();
+    Tasks.init(); Meeting.init();
     requestAnimationFrame(loop);
   }
 
-  function startMatch(rolePref) {
-    S.rolePref = rolePref || S.rolePref;
+  // ---------------------------------------------------------------- setup ---
+  function startMatch() {
+    const map = Util.mapById(SETTINGS.mapId);
+    S.map = map; GameMap.load(map);
     S.crew = []; S.corpses = [];
-    S.sabotage = { type: null, timer: 0 }; S.sabotageCool = 0; S.botSabotageTimer = Util.rand(40, 70);
-    S.emergencyCool = 0;
+    S.sabotage = { type: null, timer: 0, fixPoints: [] };
+    S.sabotageCool = 0; S.botSabotageTimer = Util.rand(40, 70);
+    S.commsDown = false; S.camerasOpen = false; S.minimapOpen = false;
 
-    const colors = Util.shuffle(COLORS).slice(0, CFG.NUM_PLAYERS);
-    const names = Util.shuffle(BOT_NAMES).slice(0, CFG.NUM_PLAYERS - 1);
+    const np = SETTINGS.numPlayers, ni = Util.clamp(SETTINGS.numImpostors, 1, Math.max(1, Math.floor((np - 1) / 2)));
+    const colorPool = Util.shuffle(COLORS).filter(c => c.id !== SETTINGS.color);
+    const names = Util.shuffle(BOT_NAMES).slice(0, np - 1);
+    const hatPool = HATS.filter(h => h.id !== 'none'), petPool = PETS.filter(p => p.id !== 'none');
 
-    // Decide impostor indices.
-    let idxs = Array.from({ length: CFG.NUM_PLAYERS }, (_, i) => i);
-    let impostorSet = new Set(Util.shuffle(idxs).slice(0, CFG.NUM_IMPOSTORS));
-    // Honour player's role preference (player is index 0).
-    if (S.rolePref === 'impostor' && !impostorSet.has(0)) { impostorSet = new Set([0, ...[...impostorSet].slice(0, CFG.NUM_IMPOSTORS - 1)]); }
-    if (S.rolePref === 'crew' && impostorSet.has(0)) { const others = idxs.filter(i => i !== 0 && !impostorSet.has(i)); impostorSet.delete(0); impostorSet.add(Util.pick(others)); }
+    let idxs = Array.from({ length: np }, (_, i) => i);
+    let impostors = new Set(Util.shuffle(idxs).slice(0, ni));
+    if (SETTINGS.rolePref === 'impostor' && !impostors.has(0)) impostors = new Set([0, ...[...impostors].slice(0, ni - 1)]);
+    if (SETTINGS.rolePref === 'crew' && impostors.has(0)) { impostors.delete(0); const o = idxs.filter(i => i !== 0 && !impostors.has(i)); impostors.add(Util.pick(o)); }
 
-    const spawn = { x: EMERGENCY_BTN.x - 60, y: EMERGENCY_BTN.y + 120 };
-    for (let i = 0; i < CFG.NUM_PLAYERS; i++) {
-      const ang = (i / CFG.NUM_PLAYERS) * Math.PI * 2;
+    const sp = resolveSpot(map.spawn);
+    for (let i = 0; i < np; i++) {
+      const ang = (i / np) * Math.PI * 2;
       const c = new Crewmate({
         id: 'p' + i,
         name: i === 0 ? 'YOU' : names[i - 1],
-        color: colors[i],
-        isPlayer: i === 0,
-        isImpostor: impostorSet.has(i),
-        x: spawn.x + Math.cos(ang) * 90,
-        y: spawn.y + Math.sin(ang) * 70,
+        color: i === 0 ? COLORS.find(c => c.id === SETTINGS.color) : colorPool[(i - 1) % colorPool.length],
+        hat: i === 0 ? SETTINGS.hat : (Math.random() < 0.5 ? Util.pick(hatPool).id : 'none'),
+        pet: i === 0 ? SETTINGS.pet : (Math.random() < 0.25 ? Util.pick(petPool).id : 'none'),
+        isPlayer: i === 0, isImpostor: impostors.has(i),
+        x: sp.x + Math.cos(ang) * 95, y: sp.y + Math.sin(ang) * 72,
+        killCooldown: SETTINGS.killCooldown,
       });
       S.crew.push(c);
     }
     S.player = S.crew[0];
-
-    // Deal tasks. Crewmates get counted tasks; impostors get fakes (uncounted).
-    for (const c of S.crew) {
-      const pool = Util.shuffle(TASK_DEFS).slice(0, CFG.TASKS_PER_CREW);
-      c.tasks = pool.map(def => ({ def, done: false }));
-    }
+    dealTasks();
 
     S.phase = 'role'; S.roleRevealT = 3.2;
-    UI.showRole(S.player);
-    UI.showHUD(true);
+    UI.showRole(S.player); UI.showHUD(true);
     Sound.resume();
+  }
+
+  function dealTasks() {
+    const spots = S.map.taskSpots;
+    const commons = spots.filter(s => s.kind === 'common');
+    const pool = spots.filter(s => s.kind !== 'common');
+    const chosenCommon = Util.shuffle(commons).slice(0, SETTINGS.commonTasks);
+    for (const c of S.crew) {
+      const list = [];
+      for (const cm of chosenCommon) list.push(makeTask(cm));
+      const extra = Util.shuffle(pool).slice(0, Math.max(0, SETTINGS.tasksPerCrew - chosenCommon.length));
+      for (const e of extra) list.push(makeTask(e));
+      c.tasks = list;
+    }
+  }
+  function makeTask(spot) { return { def: spot, done: false, step: 0, steps: spot.steps || 1 }; }
+
+  function resolveSpot(s) { const r = S.map.rooms.find(rr => rr.id === s.room); return { x: r.x + r.w / 2 + (s.dx || 0), y: r.y + r.h / 2 + (s.dy || 0) }; }
+  function roomRect(id) { return S.map.rooms.find(r => r.id === id); }
+
+  // Current world-space target of a task (handles multi-step long tasks).
+  function taskPos(t) {
+    if (t.def.steps && t.def.stepRooms && t.def.stepRooms[t.step]) { const r = roomRect(t.def.stepRooms[t.step]); return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; }
+    return { x: t.def.x, y: t.def.y };
   }
 
   // -------------------------------------------------------------- helpers ---
   function aliveCrew() { return S.crew.filter(c => c.alive && !c.isImpostor); }
   function aliveImp() { return S.crew.filter(c => c.alive && c.isImpostor); }
-  function taskStats() {
-    let total = 0, done = 0;
-    for (const c of S.crew) if (!c.isImpostor) { total += c.tasks.length; done += c.tasksDone; }
-    return { total, done };
-  }
+  function taskStats() { let total = 0, done = 0; for (const c of S.crew) if (!c.isImpostor) { for (const t of c.tasks) { total += t.steps; done += t.done ? t.steps : t.step; } } return { total, done }; }
 
   function world() {
-    return {
-      crew: S.crew, corpses: S.corpses,
-      accused: S._accused || null,
-      kill: (killer, victim) => doKill(killer, victim),
-      report: (reporter, body) => startMeeting(reporter, body),
-      sabotageActive: !!S.sabotage.type,
-    };
+    return { crew: S.crew, corpses: S.corpses, accused: S._accused, sabotage: S.sabotage,
+      kill: (k, v) => doKill(k, v), report: (r, b) => startMeeting(r, b) };
   }
 
   // ---------------------------------------------------------------- kills ---
   function doKill(killer, victim) {
     if (!victim.alive) return;
-    victim.alive = false;
-    S.corpses.push(new Corpse(victim));
-    Sound.kill();
-    if (victim.isPlayer) { S.hint = 'You were eliminated. You are now a ghost — finish your tasks.'; }
+    victim.alive = false; S.corpses.push(new Corpse(victim)); Sound.kill();
+    if (victim.isPlayer) S.hint = 'You were eliminated — you are a ghost. Finish your tasks.';
     checkWin();
   }
 
   function startMeeting(reporter, body) {
     if (S.phase === 'meeting' || S.phase === 'over') return;
     if (body) { Sound.body(); body.reported = true; }
-    // clear active sabotage on meeting
-    S.sabotage = { type: null, timer: 0 };
-    // pick a soft "accused" for bot heuristics: a random living crewmate
-    const alive = S.crew.filter(c => c.alive);
-    S._accused = Util.pick(alive);
-    S.phase = 'meeting';
-    Tasks.close(false);
+    S.sabotage = { type: null, timer: 0, fixPoints: [] }; S.commsDown = false;
+    S.camerasOpen = false; S.minimapOpen = false;
+    S._accused = Util.pick(S.crew.filter(c => c.alive));
+    S.phase = 'meeting'; Tasks.close(false);
     Meeting.start({ reporter, body, crew: S.crew, accused: S._accused, onEnd: endMeeting });
   }
 
   function endMeeting(ejected) {
     if (ejected) ejected.alive = false;
     S.corpses = [];
-    // reset cooldowns + regroup at cafeteria
-    const spawn = { x: EMERGENCY_BTN.x - 60, y: EMERGENCY_BTN.y + 120 };
+    const sp = resolveSpot(S.map.spawn);
     S.crew.forEach((c, i) => {
       if (!c.alive) return;
-      const ang = (i / CFG.NUM_PLAYERS) * Math.PI * 2;
-      c.x = spawn.x + Math.cos(ang) * 100; c.y = spawn.y + Math.sin(ang) * 76;
-      if (c.isImpostor) c.killCooldown = CFG.KILL_COOLDOWN;
+      const ang = (i / S.crew.length) * Math.PI * 2;
+      c.x = sp.x + Math.cos(ang) * 100; c.y = sp.y + Math.sin(ang) * 76;
+      if (c.isImpostor) c.killCooldown = SETTINGS.killCooldown;
       if (c.ai) { c.ai.path = []; c.ai.doing = 0; c.ai._task = null; }
     });
     if (checkWin()) return;
@@ -135,25 +141,33 @@ const Game = (() => {
   }
 
   // ------------------------------------------------------------- sabotage ---
+  function consoleAt(roomId) { const r = roomRect(roomId); return { room: roomId, x: r.x + 44, y: r.y + r.h - 34 }; }
+
   function triggerSabotage(type) {
-    if (S.sabotage.type || S.sabotageCool > 0) return;
+    if (S.sabotage.type || S.sabotageCool > 0 || S.phase !== 'play') return;
+    if (type === 'doors') { const r = GameMap.roomAt(S.player.x, S.player.y) || S.map.rooms.find(x => x.id !== S.map.spawn.room); GameMap.closeDoors(r.id, 12); S.sabotageCool = SETTINGS.sabotageCooldown; Sound.sabotage(); UI.toast('Doors sealed: ' + r.name); return; }
     S.sabotage.type = type;
-    S.sabotage.timer = type === 'reactor' ? CFG.REACTOR_COUNTDOWN : 0;
-    S.sabotageCool = CFG.SABOTAGE_COOLDOWN;
+    S.sabotage.timer = type === 'reactor' ? SETTINGS.reactorCountdown : 0;
+    S.sabotage.fixPoints = (type === 'reactor' ? S.map.reactorRooms : [type === 'lights' ? S.map.lightsRoom : S.map.commsRoom]).map(consoleAt);
+    S.sabotageCool = SETTINGS.sabotageCooldown;
+    if (type === 'comms') S.commsDown = true;
     Sound.sabotage();
-    UI.toast(type === 'reactor' ? 'REACTOR MELTDOWN — fix it!' : 'LIGHTS SABOTAGED');
+    UI.toast(type === 'reactor' ? 'REACTOR MELTDOWN — fix both consoles!' : type === 'lights' ? 'LIGHTS SABOTAGED' : 'COMMS DISABLED');
   }
-  function fixSabotage() {
-    if (!S.sabotage.type) return;
-    S.sabotage = { type: null, timer: 0 };
-    Sound.taskDone(); UI.toast('Systems restored');
+  function fixSabotage() { S.sabotage = { type: null, timer: 0, fixPoints: [] }; S.commsDown = false; Sound.taskDone(); UI.toast('Systems restored'); }
+
+  function updateSabotageCoverage() {
+    const sab = S.sabotage; if (!sab.type || !sab.fixPoints.length) return;
+    for (const fp of sab.fixPoints) fp.covered = S.crew.some(c => c.alive && !c.isImpostor && Util.dist(c.x, c.y, fp.x, fp.y) < 74);
+    const allCovered = sab.fixPoints.every(fp => fp.covered);
+    const anyCovered = sab.fixPoints.some(fp => fp.covered);
+    if ((sab.type === 'reactor' && allCovered) || ((sab.type === 'lights' || sab.type === 'comms') && anyCovered)) fixSabotage();
   }
 
   // ----------------------------------------------------------------- win ---
   function checkWin() {
     if (S.phase === 'over') return true;
-    const imp = aliveImp().length, crew = aliveCrew().length;
-    const ts = taskStats();
+    const imp = aliveImp().length, crew = aliveCrew().length, ts = taskStats();
     if (imp === 0) return endGame(true, 'Crewmates ejected all impostors!');
     if (ts.total > 0 && ts.done >= ts.total) return endGame(true, 'Crewmates finished every task!');
     if (imp >= crew) return endGame(false, 'Impostors reached the crew. They win.');
@@ -162,8 +176,7 @@ const Game = (() => {
   function endGame(crewWon, text) {
     S.phase = 'over'; S.overWin = crewWon; S.overText = text;
     const playerWon = S.player.isImpostor ? !crewWon : crewWon;
-    Sound[playerWon ? 'win' : 'lose']();
-    UI.showHUD(false);
+    Sound[playerWon ? 'win' : 'lose'](); UI.showHUD(false);
     UI.showOver(crewWon, text, playerWon, S.crew);
     return true;
   }
@@ -174,212 +187,168 @@ const Game = (() => {
     if (S.phase === 'meeting') { Meeting.update(dt); return; }
     if (S.phase !== 'play' && S.phase !== 'task') return;
 
-    // Cooldowns.
-    if (S.player.killCooldown > 0 && S.phase === 'play') {} // player cd handled below
     if (S.sabotageCool > 0) S.sabotageCool -= dt;
-    if (S.emergencyCool > 0) S.emergencyCool -= dt;
+    GameMap.updateDoors(dt);
 
-    // Reactor countdown.
-    if (S.sabotage.type === 'reactor') {
-      S.sabotage.timer -= dt;
-      if (S.sabotage.timer <= 0) { endGame(false, 'Reactor melted down. Impostors win.'); return; }
-    }
+    if (S.sabotage.type === 'reactor') { S.sabotage.timer -= dt; if (S.sabotage.timer <= 0) { endGame(false, 'Reactor melted down. Impostors win.'); return; } }
+    if (!S.sabotage.type && aliveImp().length > 0) { S.botSabotageTimer -= dt; if (S.botSabotageTimer <= 0) { triggerSabotageByBot(); S.botSabotageTimer = Util.rand(45, 85); } }
 
-    // Bot-driven sabotage occasionally.
-    if (!S.sabotage.type && aliveImp().length > 0) {
-      S.botSabotageTimer -= dt;
-      if (S.botSabotageTimer <= 0) { triggerSabotage(Math.random() < 0.5 ? 'lights' : 'reactor'); S.botSabotageTimer = Util.rand(45, 80); }
-    }
+    for (const c of S.crew) { c.scanFx = Math.max(0, c.scanFx - dt); c.updatePet(dt); }
 
-    // Player movement (frozen while a task minigame is open).
     if (S.phase === 'play') handlePlayer(dt);
 
-    // Bots.
     const w = world();
-    for (const c of S.crew) {
-      if (c.isPlayer || !c.alive) continue;
-      AI.update(c, dt, w);
-    }
+    for (const c of S.crew) { if (c.isPlayer || !c.alive) continue; AI.update(c, dt, w); }
+    updateSabotageCoverage();
 
-    // Player cooldown tick.
     if (S.player.isImpostor && S.player.killCooldown > 0) S.player.killCooldown -= dt;
 
-    // Camera follow.
-    S.cam.x = Util.clamp(S.player.x - VW / 2, 0, CFG.WORLD_W - VW);
-    S.cam.y = Util.clamp(S.player.y - VH / 2, 0, CFG.WORLD_H - VH);
+    const b = S.map.bounds;
+    S.cam.x = Util.clamp(S.player.x - VW / 2, b.minX, Math.max(b.minX, b.maxX - VW));
+    S.cam.y = Util.clamp(S.player.y - VH / 2, b.minY, Math.max(b.minY, b.maxY - VH));
 
     if (checkWin()) return;
     UI.syncHUD(S);
     Input.clear();
   }
 
+  function triggerSabotageByBot() { const r = Math.random(); triggerSabotage(r < 0.45 ? 'reactor' : r < 0.8 ? 'lights' : 'comms'); }
+
   function handlePlayer(dt) {
-    const p = S.player;
-    const ax = Input.axis();
-    const ghost = !p.alive;
-    const sp = CFG.MOVE_SPEED * (ghost ? 1.25 : 1);
+    const p = S.player, ax = Input.axis(), ghost = !p.alive;
+
+    // Cameras / minimap toggles.
+    if (Input.consume('map') && !S.commsDown) S.minimapOpen = !S.minimapOpen;
+    if (Input.consume('escape')) { S.camerasOpen = false; S.minimapOpen = false; }
+
+    if (S.camerasOpen) {
+      if (Input.consume('use')) S.camerasOpen = false;
+      p.moving = false; Input.clear(); return;
+    }
+
+    const sp = SETTINGS.moveSpeed * (ghost ? 1.25 : 1);
     if (ax.x || ax.y) {
-      if (ghost) { p.x += ax.x * sp * dt; p.y += ax.y * sp * dt; }
-      else GameMap.move(p, ax.x * sp * dt, ax.y * sp * dt);
-      p.moving = true; p.walkPhase += dt * 11;
-      if (Math.abs(ax.x) > 0.05) p.facing = ax.x > 0 ? 1 : -1;
+      if (ghost) { p.x += ax.x * sp * dt; p.y += ax.y * sp * dt; } else GameMap.move(p, ax.x * sp * dt, ax.y * sp * dt);
+      p.moving = true; p.walkPhase += dt * 11; if (Math.abs(ax.x) > 0.05) p.facing = ax.x > 0 ? 1 : -1;
     } else p.moving = false;
 
     if (ghost) { Input.clear(); return; }
 
-    // Determine context interactions.
-    const near = context();
-    S.hintCtx = near;
+    const near = context(); S.hintCtx = near;
 
     if (Input.consume('use')) {
       if (near.task) openTask(near.task);
-      else if (near.fix) fixSabotage();
+      else if (near.cameras && !S.commsDown) { S.camerasOpen = true; Sound.use(); }
       else if (near.vent && p.isImpostor) useVent(near.vent);
-      else if (near.emergency && S.emergencyCool <= 0 && p.usedEmergency < CFG.EMERGENCY_USES && !S.sabotage.type) {
-        p.usedEmergency++; startMeeting(p, null);
-      }
+      else if (near.emergency && p.usedEmergency < SETTINGS.emergencies && !S.sabotage.type) { p.usedEmergency++; startMeeting(p, null); }
     }
     if (Input.consume('report') && near.body) startMeeting(p, near.body);
-    if (Input.consume('kill') && p.isImpostor && near.victim && p.killCooldown <= 0) {
-      doKill(p, near.victim); p.killCooldown = CFG.KILL_COOLDOWN;
-    }
+    if (Input.consume('kill') && p.isImpostor && near.victim && p.killCooldown <= 0) { doKill(p, near.victim); p.killCooldown = SETTINGS.killCooldown; }
     if (Input.consume('sabotage') && p.isImpostor) UI.toggleSabotageMenu(S);
   }
 
   function context() {
     const p = S.player;
-    const out = { task: null, vent: null, body: null, victim: null, emergency: false, fix: null };
-    // nearest own undone task in range
+    const out = { task: null, vent: null, body: null, victim: null, emergency: false, cameras: false };
     let bt = Infinity;
-    for (const t of p.tasks) if (!t.done) { const d = Util.dist(p.x, p.y, t.def.x, t.def.y); if (d < CFG.USE_RANGE && d < bt) { bt = d; out.task = t; } }
-    // vent
+    for (const t of p.tasks) if (!t.done) { const tp = taskPos(t); const d = Util.dist(p.x, p.y, tp.x, tp.y); if (d < CFG.USE_RANGE && d < bt) { bt = d; out.task = t; } }
     out.vent = GameMap.ventAt(p.x, p.y, CFG.INTERACT_RANGE);
-    // body
     let bb = Infinity;
     for (const c of S.corpses) { const d = Util.dist(p.x, p.y, c.x, c.y); if (d < CFG.REPORT_RANGE && d < bb) { bb = d; out.body = c; } }
-    // kill victim
-    if (p.isImpostor) {
-      let bv = Infinity;
-      for (const c of S.crew) if (c.alive && !c.isImpostor) { const d = Util.dist(p.x, p.y, c.x, c.y); if (d < CFG.KILL_RANGE && d < bv) { bv = d; out.victim = c; } }
-    }
-    // emergency button
-    out.emergency = Util.dist(p.x, p.y, EMERGENCY_BTN.x, EMERGENCY_BTN.y) < CFG.USE_RANGE;
-    // sabotage fix points
-    if (S.sabotage.type === 'lights') { const e = ROOMS.find(r => r.id === 'electric'); if (p.x > e.x && p.x < e.x + e.w && p.y > e.y && p.y < e.y + e.h) out.fix = 'lights'; }
-    if (S.sabotage.type === 'reactor') { const e = ROOMS.find(r => r.id === 'reactor'); if (p.x > e.x && p.x < e.x + e.w && p.y > e.y && p.y < e.y + e.h) out.fix = 'reactor'; }
+    if (p.isImpostor) { let bv = Infinity; for (const c of S.crew) if (c.alive && !c.isImpostor) { const d = Util.dist(p.x, p.y, c.x, c.y); if (d < SETTINGS.killRange && d < bv) { bv = d; out.victim = c; } } }
+    for (const b of S.map.buttonSpots) if (Util.dist(p.x, p.y, b.x, b.y) < CFG.USE_RANGE) out.emergency = true;
+    const sr = roomRect(S.map.securityRoom); const sc = { x: sr.x + sr.w - 40, y: sr.y + sr.h - 36 };
+    if (Util.dist(p.x, p.y, sc.x, sc.y) < CFG.USE_RANGE) out.cameras = true;
     return out;
   }
 
-  function openTask(taskInst) {
-    if (S.player.isImpostor) { UI.toast('Faking task…'); /* impostors fake */ }
+  function openTask(t) {
+    if (S.player.isImpostor) UI.toast('Faking task…');
+    if (!S.player.isImpostor && (t.def.kind === 'visual')) S.player.scanFx = 2.2;
     S.phase = 'task';
-    Tasks.open(taskInst, (t) => {
-      if (!S.player.isImpostor) { t.done = true; Sound.taskDone(); }
+    Tasks.open(t, () => {
+      if (!S.player.isImpostor) {
+        t.step++;
+        if (t.step >= t.steps) { t.done = true; Sound.taskDone(); }
+        else { Sound.taskOk(); const r = t.def.stepRooms ? roomRect(t.def.stepRooms[t.step]) : null; UI.toast('Next step' + (r ? ': ' + r.name : '')); }
+      }
       S.phase = 'play';
       if (!checkWin()) UI.syncHUD(S);
     });
-    // If player closes without finishing, Tasks calls done only on success; restore phase on close:
-    S._taskWatch = true;
   }
 
   function useVent(vent) {
-    const group = GameMap.vents.filter(v => v.group === vent.group);
-    const idx = group.indexOf(vent);
-    const next = group[(idx + 1) % group.length];
-    S.player.x = next.x; S.player.y = next.y;
-    Sound.use();
+    const group = GameMap.vents().filter(v => v.group === vent.group);
+    const idx = group.indexOf(vent); const next = group[(idx + 1) % group.length];
+    S.player.x = next.x; S.player.y = next.y; Sound.use();
   }
 
   // --------------------------------------------------------------- render ---
   function loop(ts) {
-    const dt = Math.min((ts - last) / 1000 || 0, 1 / 20);
-    last = ts;
-    // If a task minigame was closed (not via success), unfreeze.
+    const dt = Math.min((ts - last) / 1000 || 0, 1 / 20); last = ts;
     if (S.phase === 'task' && !Tasks.isOpen()) S.phase = 'play';
-    update(dt);
-    render();
+    update(dt); render();
     requestAnimationFrame(loop);
   }
 
   function render() {
-    ctx.fillStyle = '#05080f';
-    ctx.fillRect(0, 0, VW, VH);
+    ctx.fillStyle = '#05080f'; ctx.fillRect(0, 0, VW, VH);
     if (S.phase === 'menu') return;
 
-    ctx.save();
-    ctx.translate(-S.cam.x, -S.cam.y);
-
+    ctx.save(); ctx.translate(-S.cam.x, -S.cam.y);
     GameMap.drawFloor(ctx);
     GameMap.drawVents(ctx);
-    GameMap.drawEmergency(ctx);
+    GameMap.drawDevices(ctx, S.sabotage);
     drawTaskMarkers();
-
+    for (const c of S.crew) if (c.alive) c.drawPet(ctx);
     for (const c of S.corpses) c.draw(ctx);
-
-    // Crewmates: impostors visible to the player only if player is impostor or they're the player.
     for (const c of S.crew) {
       if (!c.alive) continue;
       const showImp = c.isImpostor && (S.player.isImpostor || c.isPlayer);
       c.draw(ctx, { highlight: c.isPlayer ? 'me' : (showImp ? 'impostor' : null) });
     }
-
     ctx.restore();
 
-    // Vision mask (skip for ghosts).
-    if (S.player.alive && (S.phase === 'play' || S.phase === 'task')) drawVision();
-
-    drawContextPrompt();
+    if (S.player.alive && (S.phase === 'play' || S.phase === 'task') && !S.camerasOpen) drawVision();
   }
 
   function drawTaskMarkers() {
     const p = S.player;
     for (const t of p.tasks) {
       if (t.done) continue;
+      const tp = taskPos(t);
       const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 300);
       ctx.save();
-      ctx.globalAlpha = 0.35 + pulse * 0.3;
-      ctx.strokeStyle = p.isImpostor ? '#ff6b6b' : '#ffd24a';
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(t.def.x, t.def.y, 24, 0, Math.PI * 2); ctx.stroke();
-      ctx.globalAlpha = 0.9;
-      ctx.fillStyle = p.isImpostor ? '#ff6b6b' : '#ffd24a';
-      ctx.font = '800 16px "Segoe UI"'; ctx.textAlign = 'center';
-      ctx.fillText('!', t.def.x, t.def.y + 6);
-      ctx.textAlign = 'left';
-      ctx.restore();
+      ctx.globalAlpha = 0.35 + pulse * 0.3; ctx.strokeStyle = p.isImpostor ? '#ff6b6b' : '#ffd24a'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(tp.x, tp.y, 24, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 0.9; ctx.fillStyle = p.isImpostor ? '#ff6b6b' : '#ffd24a'; ctx.font = '800 18px "Segoe UI"'; ctx.textAlign = 'center';
+      ctx.fillText('!', tp.x, tp.y + 6); ctx.textAlign = 'left'; ctx.restore();
     }
   }
 
   function drawVision() {
     const cx = S.player.x - S.cam.x, cy = S.player.y - S.cam.y;
-    let radius = S.player.isImpostor ? CFG.VISION_IMPOSTOR : CFG.VISION_CREW;
-    if (!S.player.isImpostor && S.sabotage.type === 'lights') radius = CFG.VISION_LIGHTS_OUT;
+    let radius = S.player.isImpostor ? SETTINGS.impostorVision : SETTINGS.crewVision;
+    if (!S.player.isImpostor && S.sabotage.type === 'lights') radius = Math.min(radius, 150);
     const g = ctx.createRadialGradient(cx, cy, radius * 0.45, cx, cy, radius);
-    g.addColorStop(0, 'rgba(3,5,12,0)');
-    g.addColorStop(0.85, 'rgba(3,5,12,0.86)');
-    g.addColorStop(1, 'rgba(3,5,12,0.97)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, VW, VH);
+    g.addColorStop(0, 'rgba(3,5,12,0)'); g.addColorStop(0.85, 'rgba(3,5,12,0.86)'); g.addColorStop(1, 'rgba(3,5,12,0.97)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, VW, VH);
   }
 
-  function drawContextPrompt() {
-    if (S.phase !== 'play' || !S.player.alive) return;
-    const c = S.hintCtx; if (!c) return;
-    let label = null, key = 'E';
-    if (c.task) label = 'Use';
-    else if (c.fix) label = 'Fix';
-    else if (c.vent && S.player.isImpostor) label = 'Vent';
-    else if (c.emergency && S.player.usedEmergency < CFG.EMERGENCY_USES) label = 'Emergency';
-    // Drawn by UI as buttons instead; keep canvas clean.
+  // Render one camera feed region into a target canvas context (used by UI).
+  function renderCamera(tctx, spot, tw, th) {
+    const r = spot.rect; const scale = Math.min(tw / (r.w + 120), th / (r.h + 120));
+    tctx.save(); tctx.fillStyle = '#05080f'; tctx.fillRect(0, 0, tw, th);
+    tctx.translate(tw / 2, th / 2); tctx.scale(scale, scale); tctx.translate(-(r.x + r.w / 2), -(r.y + r.h / 2));
+    GameMap.drawFloor(tctx); GameMap.drawVents(tctx);
+    for (const c of S.crew) if (c.alive && c.x > r.x - 60 && c.x < r.x + r.w + 60 && c.y > r.y - 60 && c.y < r.y + r.h + 60) c.draw(tctx, {});
+    for (const cp of S.corpses) if (cp.x > r.x - 60 && cp.x < r.x + r.w + 60) cp.draw(tctx);
+    tctx.restore();
   }
 
-  // ---------------------------------------------------------------- api ---
   return {
-    init, startMatch, world,
-    state: S,
-    renderFrame: render,
+    init, startMatch, world, state: S, renderFrame: render,
     quitToMenu() { S.phase = 'menu'; UI.showHUD(false); UI.showMenu(); },
-    taskStats, aliveImp, aliveCrew,
-    triggerSabotage,
+    taskStats, aliveImp, aliveCrew, triggerSabotage, renderCamera,
   };
 })();

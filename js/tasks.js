@@ -28,8 +28,24 @@ const Tasks = (() => {
   function open(task, done) {
     onDone = done; current = task;
     Sound.use();
-    const map = { wires, download, card, keypad, hold, asteroids };
+    const map = { wires, download, card, keypad, hold, asteroids, scan };
     (map[task.type] || hold)(task);
+  }
+
+  // ----- Visual scan: auto-filling medical scan -----
+  function scan() {
+    shell('Submit Scan',
+      `<div class="scan-wrap">
+        <svg width="120" height="150" viewBox="0 0 120 150">
+          <rect x="40" y="58" width="40" height="60" rx="16" fill="#5a7fbf"/>
+          <circle cx="60" cy="42" r="22" fill="#5a7fbf"/>
+          <line id="scanline" x1="10" y1="20" x2="110" y2="20" stroke="#7ee6ff" stroke-width="3"/>
+        </svg>
+        <div class="bar"><div class="bar-fill" id="scf"></div></div>
+        <div class="task-hint">Hold still — others can see you scanning</div></div>`);
+    let p = 0, raf; const f = document.getElementById('scf'), line = document.getElementById('scanline');
+    const tick = () => { p = Math.min(100, p + 0.9); f.style.width = p + '%'; if (line) line.setAttribute('y1', 20 + p * 1.1), line.setAttribute('y2', 20 + p * 1.1); if (p >= 100) { finish(); return; } raf = requestAnimationFrame(tick); };
+    raf = requestAnimationFrame(tick);
   }
 
   // ----- Wiring: connect matching colours -----

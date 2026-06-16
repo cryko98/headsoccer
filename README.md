@@ -22,11 +22,18 @@ framework, no backend.
 ## ✨ Features
 
 - **🎭 Roles** — each round you're randomly a **Crewmate** or an **Impostor** (or force a side from the menu).
-- **🤖 7 AI bots** that navigate the station, do tasks, kill, vent, report bodies and **vote** in meetings.
-- **🗺️ A connected 9-room station** (Cafeteria, Reactor, Electrical, Navigation, MedBay, Weapons, Storage, Engine, Shields) with corridors, vents and a fog-of-war **vision** system.
-- **🧰 6 task minigames** — wiring, data download/upload, card swipe, code keypad, hold-to-fill, and an asteroid-clearing task. A shared **task bar** tracks crew progress.
-- **🔪 Impostor toolkit** — proximity **kills** on a cooldown, **vents** that teleport between connected rooms, and **sabotages** (kill the lights to blind the crew, or trigger a reactor meltdown countdown).
-- **🚨 Emergency meetings & voting** — report a body or hit the emergency button to start a discussion → vote → ejection, with the classic role reveal.
+- **🗺️ 3 original maps** — **Orbital Hub**, **Sky Relay** and **Frost Colony**, each a fully-connected station with its own rooms, corridor layout, vent network, security cameras and sabotage consoles. The map system is data-driven, so more maps drop in cleanly.
+- **🤖 Up to 11 AI bots** that navigate the station, do tasks, kill, vent, **report bodies**, **help fix sabotages**, and **vote** in meetings.
+- **🧰 Task taxonomy & 7 minigames** — **common** (everyone gets it), **short**, **long** (multi-step across rooms) and **visual** tasks (scan / asteroids / garbage that play a witnessable animation). Minigames: wiring, download/upload, card swipe, keypad, hold-to-fill, asteroids and a medical scan. A shared **task bar** tracks crew progress.
+- **🔪 Impostor toolkit** — proximity **kills** on a cooldown, **vents** that teleport between connected rooms, and a full **sabotage** menu:
+  - **Reactor meltdown** — timed; two consoles must be covered at once to fix.
+  - **Lights** — shrinks the crew's vision.
+  - **Comms** — disables the task list and minimap.
+  - **Doors** — seals the impostor's current room for a few seconds.
+- **📹 Security cameras & 🧭 minimap** — watch live room feeds from the security console, or pop the minimap (both go dark when comms are down).
+- **🎨 Customization** — pick your **colour**, **hat** and **pet** (the pet follows you around the station) with a live preview.
+- **⚙️ Customizable match settings** — players, impostors, player speed, kill cooldown & range, crew vision, emergency count, discussion & voting time, tasks per crew, **anonymous votes** and **confirm ejects**.
+- **🚨 Emergency meetings & voting** — report a body or hit an emergency button to start a discussion → vote → ejection, with the role reveal.
 - **🏆 Win conditions** — crew win by finishing every task or ejecting all impostors; impostors win by reaching numerical parity or letting the reactor melt down.
 - **🔊 Procedural audio** — synthesized footsteps, task jingles, kill stinger, meeting alarm and more via the Web Audio API.
 
@@ -41,8 +48,10 @@ framework, no backend.
 | Report body | `R` |
 | Kill (impostor) | `Q` |
 | Sabotage (impostor) | `F` |
+| Toggle minimap | `M` |
+| Close cameras / menus | `Esc` |
 
-On-screen action buttons mirror the keys, so it's fully playable with a mouse too.
+On-screen action buttons mirror the keys, so it's fully playable with a mouse too. **Use** is context-sensitive: it does tasks, opens vents (impostor), reads the security cameras, or calls an emergency meeting depending on what you're standing next to.
 
 ---
 

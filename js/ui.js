@@ -1,6 +1,6 @@
 /* ============================================================================
- *  ui.js — DOM HUD + overlays (menu, role reveal, action buttons, sabotage
- *  menu, game-over). The canvas stays purely the world view.
+ *  ui.js — DOM HUD + overlays: menu, settings, cosmetics, map select, role
+ *  reveal, action buttons, sabotage menu, minimap, cameras, game-over.
  * ========================================================================== */
 
 const UI = (() => {
@@ -9,12 +9,13 @@ const UI = (() => {
 
   function init() {
     refs = {
-      menu: $('#menu'), hud: $('#hud'), role: $('#role-overlay'),
-      over: $('#over-overlay'), toast: $('#toast'), sab: $('#sab-menu'),
-      taskbar: $('#taskbar-fill'), taskpct: $('#taskbar-pct'),
-      tasklist: $('#tasklist'), actions: $('#actions'),
-      alarm: $('#alarm'),
+      menu: $('#menu'), hud: $('#hud'), role: $('#role-overlay'), over: $('#over-overlay'),
+      toast: $('#toast'), sab: $('#sab-menu'), panel: $('#panel-overlay'),
+      taskbar: $('#taskbar-fill'), taskpct: $('#taskbar-pct'), taskbarWrap: $('#taskbar'),
+      tasklist: $('#tasklist'), actions: $('#actions'), alarm: $('#alarm'),
+      minimap: $('#minimap'), cameras: $('#cameras-overlay'),
     };
+    refs.mmCtx = refs.minimap.getContext('2d');
     $('#mute-btn').onclick = () => { const m = !Sound.isMuted(); Sound.setMuted(m); $('#mute-btn').textContent = m ? 'SOUND OFF' : 'SOUND ON'; };
     $('#menu-btn').onclick = () => Game.quitToMenu();
     showMenu();
@@ -22,49 +23,104 @@ const UI = (() => {
 
   // --------------------------------------------------------------- menu ---
   function showMenu() {
+    const map = Util.mapById(SETTINGS.mapId);
     refs.menu.innerHTML = `
       <div class="menu-bg"></div>
       <div class="menu-card">
         <div class="logo">
-          <div class="logo-badge">
-            <svg width="64" height="64" viewBox="0 0 64 64"><circle cx="32" cy="26" r="18" fill="#e2333a"/><ellipse cx="36" cy="24" rx="9" ry="7" fill="#9fd3ff"/><rect x="18" y="40" width="28" height="16" rx="8" fill="#b3262c"/></svg>
-          </div>
+          <div class="logo-badge"><svg width="60" height="60" viewBox="0 0 64 64"><circle cx="32" cy="26" r="18" fill="#e2333a"/><ellipse cx="36" cy="24" rx="9" ry="7" fill="#9fd3ff"/><rect x="18" y="40" width="28" height="16" rx="8" fill="#b3262c"/></svg></div>
           <h1>IMPOSTOR<span>STATION</span></h1>
-          <p class="tag">A social-deduction game · find the impostors before they get you</p>
+          <p class="tag">Social deduction — do tasks, find the impostors, survive</p>
         </div>
 
-        <div class="role-pref">
-          <div class="rp-label">PLAY AS</div>
-          <div class="rp-btns" id="rp">
-            <button class="rp-b sel" data-r="random">Random</button>
-            <button class="rp-b" data-r="crew">Crewmate</button>
-            <button class="rp-b" data-r="impostor">Impostor</button>
-          </div>
+        <div class="map-select" id="mapsel">
+          <div class="rp-label">MAP</div>
+          <div class="map-row">${MAPS.map(m => `<button class="map-b ${m.id === SETTINGS.mapId ? 'sel' : ''}" data-m="${m.id}">
+            <span class="map-name">${m.label}</span><span class="map-meta">${m.rooms.length} rooms</span></button>`).join('')}</div>
         </div>
+
+        <div class="role-pref"><div class="rp-label">PLAY AS</div>
+          <div class="rp-btns" id="rp">
+            ${['random', 'crew', 'impostor'].map(r => `<button class="rp-b ${SETTINGS.rolePref === r ? 'sel' : ''}" data-r="${r}">${r[0].toUpperCase() + r.slice(1)}</button>`).join('')}
+          </div></div>
 
         <button class="big-btn" id="play-btn">PLAY</button>
-
-        <div class="how">
-          <div class="how-col">
-            <b>Crewmate</b>
-            <span>Finish all tasks, or vote out every impostor.</span>
-          </div>
-          <div class="how-col">
-            <b>Impostor</b>
-            <span>Eliminate the crew, sabotage, and don't get caught.</span>
-          </div>
+        <div class="menu-sub">
+          <button class="sub-btn" id="settings-btn">SETTINGS</button>
+          <button class="sub-btn" id="cosmetics-btn">CUSTOMIZE</button>
         </div>
-        <div class="controls">
-          <b>Controls</b>&nbsp; WASD / Arrows move · E use · R report · Q kill · F sabotage
-        </div>
+        <div class="controls"><b>Controls</b> WASD move · E use · R report · Q kill · F sabotage · M map</div>
       </div>`;
-    refs.menu.classList.add('show');
-    showHUD(false);
-    let pref = 'random';
-    refs.menu.querySelectorAll('.rp-b').forEach(b => b.onclick = () => {
-      pref = b.dataset.r; refs.menu.querySelectorAll('.rp-b').forEach(x => x.classList.remove('sel')); b.classList.add('sel'); Sound.click();
+    refs.menu.classList.add('show'); showHUD(false);
+    refs.menu.querySelectorAll('.map-b').forEach(b => b.onclick = () => { SETTINGS.mapId = b.dataset.m; Sound.click(); showMenu(); });
+    refs.menu.querySelectorAll('.rp-b').forEach(b => b.onclick = () => { SETTINGS.rolePref = b.dataset.r; refs.menu.querySelectorAll('.rp-b').forEach(x => x.classList.remove('sel')); b.classList.add('sel'); Sound.click(); });
+    $('#play-btn').onclick = () => { Sound.init(); Sound.resume(); refs.menu.classList.remove('show'); Game.startMatch(); };
+    $('#settings-btn').onclick = showSettings;
+    $('#cosmetics-btn').onclick = showCosmetics;
+  }
+
+  // ------------------------------------------------------------ settings ---
+  function showSettings() {
+    Sound.click();
+    refs.panel.innerHTML = `
+      <div class="panel-card">
+        <div class="panel-head"><span>SETTINGS</span><button class="panel-x" id="pn-x">✕</button></div>
+        <div class="panel-body">
+          ${SETTING_DEFS.map(d => `<div class="set-row">
+            <label>${d.label}</label>
+            <input type="range" min="${d.min}" max="${d.max}" step="${d.step}" value="${SETTINGS[d.key]}" data-k="${d.key}">
+            <span class="set-val" id="sv-${d.key}">${SETTINGS[d.key]}${d.suffix || ''}</span></div>`).join('')}
+          ${SETTING_TOGGLES.map(t => `<div class="set-row toggle">
+            <label>${t.label}</label>
+            <button class="tg ${SETTINGS[t.key] ? 'on' : ''}" data-t="${t.key}">${SETTINGS[t.key] ? 'ON' : 'OFF'}</button></div>`).join('')}
+        </div>
+        <button class="big-btn" id="pn-done">DONE</button>
+      </div>`;
+    refs.panel.classList.add('show');
+    refs.panel.querySelectorAll('input[type=range]').forEach(inp => inp.oninput = () => {
+      let v = +inp.value; SETTINGS[inp.dataset.k] = v;
+      const d = SETTING_DEFS.find(x => x.key === inp.dataset.k);
+      $('#sv-' + inp.dataset.k).textContent = v + (d.suffix || '');
+      // keep impostors sane vs players
+      if (inp.dataset.k === 'numPlayers' || inp.dataset.k === 'numImpostors') clampImpostors();
     });
-    $('#play-btn').onclick = () => { Sound.init(); Sound.resume(); refs.menu.classList.remove('show'); Game.startMatch(pref); };
+    refs.panel.querySelectorAll('.tg').forEach(b => b.onclick = () => { SETTINGS[b.dataset.t] = !SETTINGS[b.dataset.t]; b.classList.toggle('on'); b.textContent = SETTINGS[b.dataset.t] ? 'ON' : 'OFF'; Sound.click(); });
+    $('#pn-x').onclick = $('#pn-done').onclick = () => { refs.panel.classList.remove('show'); };
+  }
+  function clampImpostors() { const maxImp = Math.max(1, Math.floor((SETTINGS.numPlayers - 1) / 2)); if (SETTINGS.numImpostors > maxImp) { SETTINGS.numImpostors = maxImp; const el = $('#sv-numImpostors'); if (el) el.textContent = maxImp; const inp = refs.panel.querySelector('input[data-k=numImpostors]'); if (inp) inp.value = maxImp; } }
+
+  // ----------------------------------------------------------- cosmetics ---
+  function showCosmetics() {
+    Sound.click();
+    const swatch = (arr, key, render) => arr.map(o => `<button class="cos-b ${SETTINGS[key] === o.id ? 'sel' : ''}" data-key="${key}" data-id="${o.id}">${render(o)}<span>${o.name}</span></button>`).join('');
+    refs.panel.innerHTML = `
+      <div class="panel-card">
+        <div class="panel-head"><span>CUSTOMIZE</span><button class="panel-x" id="pn-x">✕</button></div>
+        <div class="cos-preview" id="cos-preview"></div>
+        <div class="panel-body cos">
+          <div class="cos-group"><div class="rp-label">COLOR</div><div class="cos-grid">${swatch(COLORS, 'color', c => `<span class="cos-dot" style="background:${c.hex}"></span>`)}</div></div>
+          <div class="cos-group"><div class="rp-label">HAT</div><div class="cos-grid">${swatch(HATS, 'hat', h => `<span class="cos-ico">${h.id === 'none' ? '—' : h.name[0]}</span>`)}</div></div>
+          <div class="cos-group"><div class="rp-label">PET</div><div class="cos-grid">${swatch(PETS, 'pet', p => `<span class="cos-ico">${p.id === 'none' ? '—' : p.name[0]}</span>`)}</div></div>
+        </div>
+        <button class="big-btn" id="pn-done">DONE</button>
+      </div>`;
+    refs.panel.classList.add('show');
+    drawCosPreview();
+    refs.panel.querySelectorAll('.cos-b').forEach(b => b.onclick = () => {
+      SETTINGS[b.dataset.key] = b.dataset.id;
+      refs.panel.querySelectorAll(`.cos-b[data-key="${b.dataset.key}"]`).forEach(x => x.classList.remove('sel')); b.classList.add('sel');
+      Sound.click(); drawCosPreview();
+    });
+    $('#pn-x').onclick = $('#pn-done').onclick = () => refs.panel.classList.remove('show');
+  }
+  function drawCosPreview() {
+    const host = $('#cos-preview'); if (!host) return;
+    const cv = document.createElement('canvas'); cv.width = 160; cv.height = 150;
+    const c = cv.getContext('2d');
+    const demo = new Crewmate({ id: 'demo', name: '', color: COLORS.find(x => x.id === SETTINGS.color), hat: SETTINGS.hat, pet: SETTINGS.pet, isPlayer: true, x: 80, y: 86 });
+    if (SETTINGS.pet !== 'none') { demo.petPos = { x: 36, y: 96 }; demo.drawPet(c); }
+    demo.draw(c, {});
+    host.innerHTML = ''; host.appendChild(cv);
   }
 
   // --------------------------------------------------------- role reveal ---
@@ -74,18 +130,16 @@ const UI = (() => {
     refs.role.innerHTML = `
       <div class="role-card ${imp ? 'imp' : 'crew'}">
         <div class="role-word">${imp ? 'IMPOSTOR' : 'CREWMATE'}</div>
-        <div class="role-figure" style="--c:${p.color.hex}">
-          <svg width="120" height="120" viewBox="0 0 120 120">
-            <ellipse cx="60" cy="104" rx="30" ry="8" fill="rgba(0,0,0,0.4)"/>
-            <rect x="34" y="66" width="52" height="40" rx="18" fill="${p.color.hex}"/>
-            <circle cx="60" cy="50" r="30" fill="${p.color.hex}"/>
-            <ellipse cx="66" cy="46" rx="15" ry="11" fill="#9fd3ff"/>
-            ${imp ? '<circle cx="60" cy="46" r="4" fill="#ff2b3b"/>' : ''}
-          </svg>
-        </div>
+        <div class="role-figure"><svg width="120" height="120" viewBox="0 0 120 120">
+          <ellipse cx="60" cy="104" rx="30" ry="8" fill="rgba(0,0,0,0.4)"/>
+          <rect x="34" y="66" width="52" height="40" rx="18" fill="${p.color.hex}"/>
+          <circle cx="60" cy="50" r="30" fill="${p.color.hex}"/>
+          <ellipse cx="66" cy="46" rx="15" ry="11" fill="#9fd3ff"/>
+          ${imp ? '<circle cx="60" cy="46" r="4" fill="#ff2b3b"/>' : ''}</svg></div>
         <div class="role-desc">${imp
           ? `Eliminate the crew without being caught.${mates.length ? `<br>Your team: <b>${mates.map(m => m.name).join(', ')}</b>` : ''}`
-          : `Complete <b>${p.tasks.length} tasks</b> and find the impostors.`}</div>
+          : `Complete your <b>${p.tasks.length} tasks</b> and find the impostors.`}</div>
+        <div class="role-map">${Util.mapById(SETTINGS.mapId).label}</div>
       </div>`;
     refs.role.classList.add('show');
   }
@@ -95,40 +149,41 @@ const UI = (() => {
   function showHUD(b) { refs.hud.classList.toggle('show', b); }
 
   function syncHUD(S) {
-    const p = S.player;
-    // Task bar (crew progress, always visible — impostors see the crew's progress too).
-    const ts = Game.taskStats();
-    const pct = ts.total ? Math.round((ts.done / ts.total) * 100) : 0;
+    const p = S.player, ts = Game.taskStats(), pct = ts.total ? Math.round((ts.done / ts.total) * 100) : 0;
     refs.taskbar.style.width = pct + '%';
     refs.taskpct.textContent = `TASKS ${pct}%`;
-
-    // Ghost banner.
     refs.hud.classList.toggle('ghost', !p.alive);
 
-    // Task list.
-    if (p.tasks.length) {
+    // Comms down hides task list + minimap.
+    const commsDown = S.commsDown;
+    if (commsDown) { refs.tasklist.innerHTML = `<div class="tl-head" style="color:#ff5167">COMMS DISABLED</div><div class="tl-row">Task list offline</div>`; }
+    else if (p.tasks.length) {
       refs.tasklist.innerHTML = `<div class="tl-head">${p.isImpostor ? 'FAKE TASKS' : 'TASKS'}</div>` +
         p.tasks.map(t => `<div class="tl-row ${t.done ? 'done' : ''}">
-          <span class="tl-dot"></span>${t.def.name} <i>· ${roomName(t.def.room)}</i></div>`).join('');
+          <span class="tl-dot"></span>${t.def.name}${t.steps > 1 ? ` (${t.done ? t.steps : t.step}/${t.steps})` : ''} <i>· ${roomName(t.def.room)}</i></div>`).join('');
     }
 
-    // Alarm (sabotage).
     if (S.sabotage.type) {
       refs.alarm.classList.add('show');
       refs.alarm.innerHTML = S.sabotage.type === 'reactor'
         ? `<span class="al-r">⚠ REACTOR MELTDOWN</span> <b>${Math.ceil(Math.max(0, S.sabotage.timer))}s</b>`
-        : `<span class="al-r">⚠ LIGHTS SABOTAGED</span>`;
+        : S.sabotage.type === 'lights' ? `<span class="al-r">⚠ LIGHTS SABOTAGED</span>`
+        : `<span class="al-r">⚠ COMMS DISABLED</span>`;
     } else refs.alarm.classList.remove('show');
 
-    // Action buttons.
     renderActions(S);
+    renderMinimap(S, commsDown);
+    if (S.camerasOpen) renderCameras(S); else if (refs.cameras.classList.contains('show')) refs.cameras.classList.remove('show');
   }
 
   function renderActions(S) {
     const p = S.player, c = S.hintCtx || {};
     if (!p.alive) { refs.actions.innerHTML = `<div class="ghost-tag">GHOST · finish tasks</div>`; return; }
+    if (S.camerasOpen) { refs.actions.innerHTML = `<button class="act use" data-act="use"><span class="act-l">CLOSE</span><span class="act-k">E</span></button>`; refs.actions.querySelector('[data-act]').onclick = () => Input.press('use'); return; }
     const btns = [];
-    btns.push(actBtn('use', 'USE', 'E', !!(c.task || c.fix || (c.vent && p.isImpostor) || (c.emergency && p.usedEmergency < CFG.EMERGENCY_USES))));
+    const useOn = !!(c.task || c.cameras || (c.vent && p.isImpostor) || (c.emergency && p.usedEmergency < SETTINGS.emergencies));
+    const useLabel = c.cameras ? 'CAMS' : (c.vent && p.isImpostor) ? 'VENT' : c.emergency ? 'MEETING' : 'USE';
+    btns.push(actBtn('use', useLabel, 'E', useOn));
     btns.push(actBtn('report', 'REPORT', 'R', !!c.body, 'report'));
     if (p.isImpostor) {
       const cd = Math.ceil(Math.max(0, p.killCooldown));
@@ -138,36 +193,57 @@ const UI = (() => {
     refs.actions.innerHTML = btns.join('');
     refs.actions.querySelectorAll('[data-act]').forEach(el => el.onclick = () => Input.press(el.dataset.act));
   }
-  function actBtn(act, label, key, enabled, kind = 'use') {
-    return `<button class="act ${kind} ${enabled ? '' : 'dis'}" data-act="${act}">
-        <span class="act-l">${label}</span><span class="act-k">${key}</span></button>`;
+  function actBtn(act, label, key, enabled, kind = 'use') { return `<button class="act ${kind} ${enabled ? '' : 'dis'}" data-act="${act}"><span class="act-l">${label}</span><span class="act-k">${key}</span></button>`; }
+  function roomName(id) { const r = Util.mapById(SETTINGS.mapId).rooms.find(x => x.id === id); return r ? r.name : id; }
+
+  // --------------------------------------------------------------- minimap ---
+  function renderMinimap(S, commsDown) {
+    if (!S.minimapOpen || commsDown) { refs.minimap.classList.remove('show'); return; }
+    refs.minimap.classList.add('show');
+    const ctx = refs.mmCtx, W = 300, H = 200, m = S.map, b = m.bounds;
+    const sx = W / (b.maxX - b.minX), sy = H / (b.maxY - b.minY), s = Math.min(sx, sy);
+    const ox = (W - (b.maxX - b.minX) * s) / 2, oy = (H - (b.maxY - b.minY) * s) / 2;
+    const tx = x => ox + (x - b.minX) * s, ty = y => oy + (y - b.minY) * s;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(8,12,22,0.85)'; ctx.fillRect(0, 0, W, H);
+    for (const r of m.rooms) { ctx.fillStyle = '#26324a'; ctx.fillRect(tx(r.x), ty(r.y), r.w * s, r.h * s); ctx.strokeStyle = '#4a5d82'; ctx.lineWidth = 1; ctx.strokeRect(tx(r.x), ty(r.y), r.w * s, r.h * s); }
+    for (const cr of m.corridors) { ctx.fillStyle = '#1c2740'; ctx.fillRect(tx(cr.x), ty(cr.y), cr.w * s, cr.h * s); }
+    // tasks
+    for (const t of S.player.tasks) if (!t.done) { const tp = t.def.steps && t.def.stepRooms ? m.rooms.find(rr => rr.id === t.def.stepRooms[t.step]) : null; const px = tp ? tp.x + tp.w / 2 : t.def.x, py = tp ? tp.y + tp.h / 2 : t.def.y; ctx.fillStyle = '#ffd24a'; ctx.beginPath(); ctx.arc(tx(px), ty(py), 3, 0, Math.PI * 2); ctx.fill(); }
+    // player
+    ctx.fillStyle = S.player.color.hex; ctx.beginPath(); ctx.arc(tx(S.player.x), ty(S.player.y), 4, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
   }
-  function roomName(id) { const r = ROOMS.find(x => x.id === id); return r ? r.name : id; }
+
+  // --------------------------------------------------------------- cameras ---
+  function renderCameras(S) {
+    if (!refs.cameras.classList.contains('show')) {
+      refs.cameras.innerHTML = `<div class="cams-card"><div class="cams-head">SECURITY CAMERAS <button class="cams-x" id="cams-x">CLOSE (E)</button></div>
+        <div class="cams-grid">${S.map.cameraSpots.map((c, i) => `<div class="cam-cell"><canvas id="cam-${i}" width="300" height="190"></canvas><span>${roomName(c.room)}</span></div>`).join('')}</div></div>`;
+      refs.cameras.classList.add('show');
+      $('#cams-x').onclick = () => Input.press('use');
+    }
+    S.map.cameraSpots.forEach((spot, i) => { const cv = $('#cam-' + i); if (cv) Game.renderCamera(cv.getContext('2d'), spot, 300, 190); });
+  }
 
   // ------------------------------------------------------- sabotage menu ---
   function toggleSabotageMenu(S) {
     if (refs.sab.classList.contains('show')) { refs.sab.classList.remove('show'); return; }
-    if (S.sabotageCool > 0 || S.sabotage.type) { toast('Sabotage on cooldown'); return; }
+    if (S.sabotageCool > 0) { toast('Sabotage on cooldown'); return; }
     refs.sab.innerHTML = `
       <div class="sab-card">
         <div class="sab-title">SABOTAGE</div>
-        <button class="sab-b" data-s="lights">Kill the Lights<span>Blind the crew</span></button>
-        <button class="sab-b" data-s="reactor">Reactor Meltdown<span>${CFG.REACTOR_COUNTDOWN}s to fix</span></button>
+        <button class="sab-b" data-s="reactor" ${S.sabotage.type ? 'disabled' : ''}>Reactor Meltdown<span>${SETTINGS.reactorCountdown}s · two consoles</span></button>
+        <button class="sab-b" data-s="lights" ${S.sabotage.type ? 'disabled' : ''}>Kill the Lights<span>Blind the crew</span></button>
+        <button class="sab-b" data-s="comms" ${S.sabotage.type ? 'disabled' : ''}>Disable Comms<span>No task list / map</span></button>
+        <button class="sab-b" data-s="doors">Seal Doors<span>Trap this room (12s)</span></button>
         <button class="sab-x" data-s="cancel">Cancel</button>
       </div>`;
     refs.sab.classList.add('show');
-    refs.sab.querySelectorAll('[data-s]').forEach(b => b.onclick = () => {
-      const s = b.dataset.s; refs.sab.classList.remove('show');
-      if (s !== 'cancel') Game.triggerSabotage(s);
-    });
+    refs.sab.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { const s = b.dataset.s; refs.sab.classList.remove('show'); if (s !== 'cancel') Game.triggerSabotage(s); });
   }
 
-  // --------------------------------------------------------------- toast ---
-  function toast(msg) {
-    refs.toast.textContent = msg;
-    refs.toast.classList.remove('show'); void refs.toast.offsetWidth; refs.toast.classList.add('show');
-    clearTimeout(refs.toast._t); refs.toast._t = setTimeout(() => refs.toast.classList.remove('show'), 2400);
-  }
+  function toast(msg) { refs.toast.textContent = msg; refs.toast.classList.remove('show'); void refs.toast.offsetWidth; refs.toast.classList.add('show'); clearTimeout(refs.toast._t); refs.toast._t = setTimeout(() => refs.toast.classList.remove('show'), 2400); }
 
   // ---------------------------------------------------------------- over ---
   function showOver(crewWon, text, playerWon, crew) {
@@ -177,11 +253,8 @@ const UI = (() => {
         <div class="over-word">${crewWon ? 'CREWMATES WIN' : 'IMPOSTORS WIN'}</div>
         <div class="over-you ${playerWon ? 'won' : 'lost'}">${playerWon ? 'VICTORY' : 'DEFEAT'}</div>
         <div class="over-text">${text}</div>
-        <div class="over-imps">Impostors were: <b>${imps.map(i => i.name).join(', ')}</b></div>
-        <div class="over-actions">
-          <button class="big-btn" id="over-again">PLAY AGAIN</button>
-          <button class="ghost-btn" id="over-menu">MENU</button>
-        </div>
+        <div class="over-imps">Impostors: <b>${imps.map(i => i.name).join(', ')}</b></div>
+        <div class="over-actions"><button class="big-btn" id="over-again">PLAY AGAIN</button><button class="ghost-btn" id="over-menu">MENU</button></div>
       </div>`;
     refs.over.classList.add('show');
     $('#over-again').onclick = () => { refs.over.classList.remove('show'); Game.startMatch(); };
