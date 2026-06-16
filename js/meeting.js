@@ -94,6 +94,7 @@ const Meeting = (() => {
     render();
     Sound.eject();
     const ej = S.tally.ejected;
+    if (ej) { const card = host.querySelector('.meet-card'); if (card) { const fx = document.createElement('div'); fx.className = 'eject-anim'; fx.innerHTML = `<div class="eject-fig" style="--c:${ej.color.hex}"></div>`; card.appendChild(fx); } }
     const aliveImp = S.crew.filter(c => c.alive && c.isImpostor).length - (ej && ej.isImpostor ? 1 : 0);
     let msg;
     if (!ej) msg = S.tally.skips ? 'No one was ejected. (Skipped / tie)' : 'No one was ejected. (Tie)';

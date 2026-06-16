@@ -14,6 +14,7 @@ const UI = (() => {
       taskbar: $('#taskbar-fill'), taskpct: $('#taskbar-pct'), taskbarWrap: $('#taskbar'),
       tasklist: $('#tasklist'), actions: $('#actions'), alarm: $('#alarm'),
       minimap: $('#minimap'), cameras: $('#cameras-overlay'),
+      admin: $('#admin-overlay'), vitals: $('#vitals-overlay'),
     };
     refs.mmCtx = refs.minimap.getContext('2d');
     $('#mute-btn').onclick = () => { const m = !Sound.isMuted(); Sound.setMuted(m); $('#mute-btn').textContent = m ? 'SOUND OFF' : 'SOUND ON'; };
@@ -173,16 +174,23 @@ const UI = (() => {
 
     renderActions(S);
     renderMinimap(S, commsDown);
-    if (S.camerasOpen) renderCameras(S); else if (refs.cameras.classList.contains('show')) refs.cameras.classList.remove('show');
+
+    // Console viewers.
+    if (S.viewer !== 'cameras' && refs.cameras.classList.contains('show')) refs.cameras.classList.remove('show');
+    if (S.viewer !== 'admin' && refs.admin.classList.contains('show')) refs.admin.classList.remove('show');
+    if (S.viewer !== 'vitals' && refs.vitals.classList.contains('show')) refs.vitals.classList.remove('show');
+    if (S.viewer === 'cameras') renderCameras(S);
+    else if (S.viewer === 'admin') renderAdmin(S);
+    else if (S.viewer === 'vitals') renderVitals(S);
   }
 
   function renderActions(S) {
     const p = S.player, c = S.hintCtx || {};
     if (!p.alive) { refs.actions.innerHTML = `<div class="ghost-tag">GHOST · finish tasks</div>`; return; }
-    if (S.camerasOpen) { refs.actions.innerHTML = `<button class="act use" data-act="use"><span class="act-l">CLOSE</span><span class="act-k">E</span></button>`; refs.actions.querySelector('[data-act]').onclick = () => Input.press('use'); return; }
+    if (S.viewer) { refs.actions.innerHTML = `<button class="act use" data-act="use"><span class="act-l">CLOSE</span><span class="act-k">E</span></button>`; refs.actions.querySelector('[data-act]').onclick = () => Input.press('use'); return; }
     const btns = [];
-    const useOn = !!(c.task || c.cameras || (c.vent && p.isImpostor) || (c.emergency && p.usedEmergency < SETTINGS.emergencies));
-    const useLabel = c.cameras ? 'CAMS' : (c.vent && p.isImpostor) ? 'VENT' : c.emergency ? 'MEETING' : 'USE';
+    const useOn = !!(c.task || c.cameras || c.admin || c.vitals || (c.vent && p.isImpostor) || (c.emergency && p.usedEmergency < SETTINGS.emergencies));
+    const useLabel = c.cameras ? 'CAMS' : c.admin ? 'ADMIN' : c.vitals ? 'VITALS' : (c.vent && p.isImpostor) ? 'VENT' : c.emergency ? 'MEETING' : 'USE';
     btns.push(actBtn('use', useLabel, 'E', useOn));
     btns.push(actBtn('report', 'REPORT', 'R', !!c.body, 'report'));
     if (p.isImpostor) {
@@ -224,6 +232,42 @@ const UI = (() => {
       $('#cams-x').onclick = () => Input.press('use');
     }
     S.map.cameraSpots.forEach((spot, i) => { const cv = $('#cam-' + i); if (cv) Game.renderCamera(cv.getContext('2d'), spot, 300, 190); });
+  }
+
+  // ----------------------------------------------------------------- admin ---
+  let _adminCv = null;
+  function renderAdmin(S) {
+    if (!refs.admin.classList.contains('show')) {
+      refs.admin.innerHTML = `<div class="cams-card"><div class="cams-head" style="color:#7dd3fc">ADMIN MAP — live room headcount <button class="cams-x" id="adm-x">CLOSE (E)</button></div>
+        <canvas id="adm-cv" width="640" height="380"></canvas></div>`;
+      refs.admin.classList.add('show'); _adminCv = $('#adm-cv'); $('#adm-x').onclick = () => Input.press('use');
+    }
+    const m = S.map, ctx = _adminCv.getContext('2d'), W = 640, H = 380, b = m.bounds;
+    const s = Math.min(W / (b.maxX - b.minX), H / (b.maxY - b.minY));
+    const ox = (W - (b.maxX - b.minX) * s) / 2, oy = (H - (b.maxY - b.minY) * s) / 2;
+    const tx = x => ox + (x - b.minX) * s, ty = y => oy + (y - b.minY) * s;
+    ctx.clearRect(0, 0, W, H); ctx.fillStyle = '#070d18'; ctx.fillRect(0, 0, W, H);
+    for (const cr of m.corridors) { ctx.fillStyle = '#16203a'; ctx.fillRect(tx(cr.x), ty(cr.y), cr.w * s, cr.h * s); }
+    for (const r of m.rooms) {
+      const count = S.crew.filter(c => c.alive && c.x >= r.x && c.x <= r.x + r.w && c.y >= r.y && c.y <= r.y + r.h).length;
+      ctx.fillStyle = count ? '#22406a' : '#1b283f'; ctx.fillRect(tx(r.x), ty(r.y), r.w * s, r.h * s);
+      ctx.strokeStyle = '#3a4d72'; ctx.lineWidth = 1; ctx.strokeRect(tx(r.x), ty(r.y), r.w * s, r.h * s);
+      ctx.fillStyle = '#9fb4d6'; ctx.font = '700 9px "Segoe UI"'; ctx.textAlign = 'center';
+      ctx.fillText(r.name, tx(r.x + r.w / 2), ty(r.y) + 14);
+      if (count) { ctx.fillStyle = '#7dd3fc'; ctx.font = '900 22px "Segoe UI"'; ctx.fillText(count, tx(r.x + r.w / 2), ty(r.y + r.h / 2) + 8); }
+    }
+    ctx.textAlign = 'left';
+  }
+
+  // ---------------------------------------------------------------- vitals ---
+  function renderVitals(S) {
+    refs.vitals.innerHTML = `<div class="vit-card"><div class="cams-head" style="color:#5af0a0">VITALS — crew status <button class="cams-x" id="vit-x">CLOSE (E)</button></div>
+      <div class="vit-grid">${S.crew.map(c => `<div class="vit-row ${c.alive ? 'alive' : 'dead'}">
+        <span class="vit-av" style="--c:${c.color.hex}"></span>
+        <span class="vit-name">${c.name}${c.isPlayer ? ' (you)' : ''}</span>
+        <span class="vit-stat">${c.alive ? 'ALIVE' : 'DEAD'}</span></div>`).join('')}</div></div>`;
+    refs.vitals.classList.add('show');
+    $('#vit-x').onclick = () => Input.press('use');
   }
 
   // ------------------------------------------------------- sabotage menu ---

@@ -18,7 +18,9 @@ const Game = (() => {
     sabotageCool: 0, botSabotageTimer: 45,
     commsDown: false,
     roleRevealT: 0,
-    camerasOpen: false, minimapOpen: false,
+    viewer: null,                  // null | 'cameras' | 'admin' | 'vitals'
+    minimapOpen: false,
+    killFlash: 0,
     overWin: false, overText: '',
     hintCtx: null, hint: '',
     _accused: null, _taskFlash: 0,
@@ -38,7 +40,7 @@ const Game = (() => {
     S.crew = []; S.corpses = [];
     S.sabotage = { type: null, timer: 0, fixPoints: [] };
     S.sabotageCool = 0; S.botSabotageTimer = Util.rand(40, 70);
-    S.commsDown = false; S.camerasOpen = false; S.minimapOpen = false;
+    S.commsDown = false; S.viewer = null; S.minimapOpen = false; S.killFlash = 0;
 
     const np = SETTINGS.numPlayers, ni = Util.clamp(SETTINGS.numImpostors, 1, Math.max(1, Math.floor((np - 1) / 2)));
     const colorPool = Util.shuffle(COLORS).filter(c => c.id !== SETTINGS.color);
@@ -111,7 +113,7 @@ const Game = (() => {
   function doKill(killer, victim) {
     if (!victim.alive) return;
     victim.alive = false; S.corpses.push(new Corpse(victim)); Sound.kill();
-    if (victim.isPlayer) S.hint = 'You were eliminated — you are a ghost. Finish your tasks.';
+    if (victim.isPlayer) { S.killFlash = 1.3; S.viewer = null; S.minimapOpen = false; S.hint = 'You were eliminated — you are a ghost. Finish your tasks.'; }
     checkWin();
   }
 
@@ -119,7 +121,7 @@ const Game = (() => {
     if (S.phase === 'meeting' || S.phase === 'over') return;
     if (body) { Sound.body(); body.reported = true; }
     S.sabotage = { type: null, timer: 0, fixPoints: [] }; S.commsDown = false;
-    S.camerasOpen = false; S.minimapOpen = false;
+    S.viewer = null; S.minimapOpen = false;
     S._accused = Util.pick(S.crew.filter(c => c.alive));
     S.phase = 'meeting'; Tasks.close(false);
     Meeting.start({ reporter, body, crew: S.crew, accused: S._accused, onEnd: endMeeting });
@@ -194,6 +196,7 @@ const Game = (() => {
     if (!S.sabotage.type && aliveImp().length > 0) { S.botSabotageTimer -= dt; if (S.botSabotageTimer <= 0) { triggerSabotageByBot(); S.botSabotageTimer = Util.rand(45, 85); } }
 
     for (const c of S.crew) { c.scanFx = Math.max(0, c.scanFx - dt); c.updatePet(dt); }
+    if (S.killFlash > 0) S.killFlash -= dt;
 
     if (S.phase === 'play') handlePlayer(dt);
 
@@ -217,12 +220,13 @@ const Game = (() => {
   function handlePlayer(dt) {
     const p = S.player, ax = Input.axis(), ghost = !p.alive;
 
-    // Cameras / minimap toggles.
+    // Minimap toggle.
     if (Input.consume('map') && !S.commsDown) S.minimapOpen = !S.minimapOpen;
-    if (Input.consume('escape')) { S.camerasOpen = false; S.minimapOpen = false; }
+    if (Input.consume('escape')) { S.viewer = null; S.minimapOpen = false; }
 
-    if (S.camerasOpen) {
-      if (Input.consume('use')) S.camerasOpen = false;
+    // A console viewer (cameras / admin / vitals) freezes movement.
+    if (S.viewer) {
+      if (Input.consume('use')) S.viewer = null;
       p.moving = false; Input.clear(); return;
     }
 
@@ -238,7 +242,9 @@ const Game = (() => {
 
     if (Input.consume('use')) {
       if (near.task) openTask(near.task);
-      else if (near.cameras && !S.commsDown) { S.camerasOpen = true; Sound.use(); }
+      else if (near.cameras && !S.commsDown) { S.viewer = 'cameras'; Sound.use(); }
+      else if (near.admin && !S.commsDown) { S.viewer = 'admin'; Sound.use(); }
+      else if (near.vitals && !S.commsDown) { S.viewer = 'vitals'; Sound.use(); }
       else if (near.vent && p.isImpostor) useVent(near.vent);
       else if (near.emergency && p.usedEmergency < SETTINGS.emergencies && !S.sabotage.type) { p.usedEmergency++; startMeeting(p, null); }
     }
@@ -249,7 +255,7 @@ const Game = (() => {
 
   function context() {
     const p = S.player;
-    const out = { task: null, vent: null, body: null, victim: null, emergency: false, cameras: false };
+    const out = { task: null, vent: null, body: null, victim: null, emergency: false, cameras: false, admin: false, vitals: false };
     let bt = Infinity;
     for (const t of p.tasks) if (!t.done) { const tp = taskPos(t); const d = Util.dist(p.x, p.y, tp.x, tp.y); if (d < CFG.USE_RANGE && d < bt) { bt = d; out.task = t; } }
     out.vent = GameMap.ventAt(p.x, p.y, CFG.INTERACT_RANGE);
@@ -259,6 +265,10 @@ const Game = (() => {
     for (const b of S.map.buttonSpots) if (Util.dist(p.x, p.y, b.x, b.y) < CFG.USE_RANGE) out.emergency = true;
     const sr = roomRect(S.map.securityRoom); const sc = { x: sr.x + sr.w - 40, y: sr.y + sr.h - 36 };
     if (Util.dist(p.x, p.y, sc.x, sc.y) < CFG.USE_RANGE) out.cameras = true;
+    const ar = roomRect(S.map.adminRoom); const ac = { x: ar.x + 46, y: ar.y + 44 };
+    if (Util.dist(p.x, p.y, ac.x, ac.y) < CFG.USE_RANGE) out.admin = true;
+    const vr = roomRect(S.map.vitalsRoom); const vc = { x: vr.x + vr.w - 46, y: vr.y + 44 };
+    if (Util.dist(p.x, p.y, vc.x, vc.y) < CFG.USE_RANGE) out.vitals = true;
     return out;
   }
 
@@ -309,7 +319,15 @@ const Game = (() => {
     }
     ctx.restore();
 
-    if (S.player.alive && (S.phase === 'play' || S.phase === 'task') && !S.camerasOpen) drawVision();
+    if (S.player.alive && (S.phase === 'play' || S.phase === 'task') && !S.viewer) drawVision();
+
+    // Kill flash vignette.
+    if (S.killFlash > 0) {
+      const a = Math.min(1, S.killFlash) * 0.6;
+      const g = ctx.createRadialGradient(VW / 2, VH / 2, 120, VW / 2, VH / 2, VW * 0.7);
+      g.addColorStop(0, 'rgba(180,20,30,0)'); g.addColorStop(1, `rgba(150,10,20,${a})`);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, VW, VH);
+    }
   }
 
   function drawTaskMarkers() {

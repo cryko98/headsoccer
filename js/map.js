@@ -120,14 +120,20 @@ const GameMap = (() => {
       ctx.fillStyle = '#fff'; ctx.font = '800 11px "Segoe UI"'; ctx.textAlign = 'center'; ctx.fillText('SOS', 0, 4); ctx.textAlign = 'left';
       ctx.restore();
     }
-    // Security console.
+    // Console helper.
+    const drawConsole = (x, y, label, col) => {
+      ctx.save(); ctx.translate(x, y);
+      ctx.fillStyle = '#11202c'; roundRect(ctx, -27, -18, 54, 36, 6); ctx.fill();
+      ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = col; ctx.font = '700 9px "Segoe UI"'; ctx.textAlign = 'center'; ctx.fillText(label, 0, 3); ctx.textAlign = 'left';
+      ctx.restore();
+    };
     const sr = M.rooms.find(r => r.id === M.securityRoom);
-    if (sr) { ctx.save(); ctx.translate(sr.x + sr.w - 40, sr.y + sr.h - 36);
-      ctx.fillStyle = '#11202c'; roundRect(ctx, -26, -18, 52, 36, 6); ctx.fill();
-      ctx.strokeStyle = '#3aa6c4'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.fillStyle = '#4ad7e0'; ctx.font = '700 9px "Segoe UI"'; ctx.textAlign = 'center'; ctx.fillText('CAMS', 0, 3); ctx.textAlign = 'left';
-      ctx.restore(); M._secConsole = { x: sr.x + sr.w - 40, y: sr.y + sr.h - 36 };
-    }
+    if (sr) drawConsole(sr.x + sr.w - 40, sr.y + sr.h - 36, 'CAMS', '#4ad7e0');
+    const ar = M.rooms.find(r => r.id === M.adminRoom);
+    if (ar) drawConsole(ar.x + 46, ar.y + 44, 'ADMIN', '#7dd3fc');
+    const vr = M.rooms.find(r => r.id === M.vitalsRoom);
+    if (vr) drawConsole(vr.x + vr.w - 46, vr.y + 44, 'VITALS', '#5af0a0');
     // Sabotage fix consoles (lit when active).
     const litRooms = sab && sab.type === 'reactor' ? M.reactorRooms : sab && sab.type === 'lights' ? [M.lightsRoom] : sab && sab.type === 'comms' ? [M.commsRoom] : [];
     for (const rid of litRooms) {

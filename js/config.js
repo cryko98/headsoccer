@@ -152,6 +152,8 @@ const MAPS = (() => {
   m1.lightsRoom = 'electrical';
   m1.reactorRooms = ['reactor', 'engine'];
   m1.commsRoom = 'navigation';
+  m1.adminRoom = 'storage';
+  m1.vitalsRoom = 'medbay';
 
   // ---- Map 2: Sky Relay (4x2, wide) ----
   const m2 = buildGrid({ cols: 4, rows: 2, rw: 320, rh: 260, gx: 200, gy: 230, ox: 110, oy: 150,
@@ -185,6 +187,8 @@ const MAPS = (() => {
   m2.lightsRoom = 'locker';
   m2.reactorRooms = ['launchpad', 'lab'];
   m2.commsRoom = 'comms';
+  m2.adminRoom = 'lounge';
+  m2.vitalsRoom = 'greenhouse';
 
   // ---- Map 3: Frost Colony (3x3 compact, icy) ----
   const m3 = buildGrid({ cols: 3, rows: 3, rw: 330, rh: 230, gx: 210, gy: 180, ox: 130, oy: 120,
@@ -216,6 +220,8 @@ const MAPS = (() => {
   m3.lightsRoom = 'boiler';
   m3.reactorRooms = ['boiler', 'lab'];
   m3.commsRoom = 'comms';
+  m3.adminRoom = 'storage';
+  m3.vitalsRoom = 'specimen';
 
   // Resolve placements to absolute coordinates + compute bounds.
   for (const m of [m1, m2, m3]) {

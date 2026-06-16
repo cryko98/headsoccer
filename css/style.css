@@ -301,6 +301,27 @@ html, body { height: 100%; background: #03050a; color: var(--txt); font-family: 
 /* scan task */
 .scan-wrap { text-align: center; } .scan-wrap svg { margin-bottom: 10px; }
 
+/* admin map + vitals */
+#admin-overlay.show, #vitals-overlay.show { background: rgba(3,5,12,0.82); backdrop-filter: blur(4px); z-index: 56; }
+#adm-cv { display: block; width: 100%; border: 1px solid var(--line); border-radius: 10px; background: #070d18; }
+.vit-card { width: 92%; max-width: 560px; background: linear-gradient(180deg, #0e2018, #0a1410); border: 1px solid var(--line); border-radius: 18px; padding: 16px; box-shadow: var(--shadow); }
+.vit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.vit-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--line); }
+.vit-av { width: 22px; height: 22px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--c) 80%, white), var(--c)); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.3); flex: none; }
+.vit-name { flex: 1; font-weight: 700; font-size: 13px; }
+.vit-stat { font-weight: 900; font-size: 12px; letter-spacing: 1px; }
+.vit-row.alive .vit-stat { color: var(--green); }
+.vit-row.dead { opacity: 0.7; }
+.vit-row.dead .vit-stat { color: var(--red); }
+.vit-row.dead .vit-name { text-decoration: line-through; color: var(--muted); }
+
+/* eject animation */
+.eject-anim { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.eject-fig { position: absolute; top: 46%; left: -60px; width: 40px; height: 52px; border-radius: 18px;
+  background: var(--c); box-shadow: inset 0 0 0 3px rgba(0,0,0,0.25); animation: ejectFly 3.6s ease-in forwards; }
+.eject-fig::after { content: ''; position: absolute; top: 8px; left: 14px; width: 20px; height: 14px; border-radius: 8px; background: #9fd3ff; }
+@keyframes ejectFly { 0% { left: -60px; top: 60%; transform: rotate(0deg) scale(1.2); } 100% { left: 108%; top: 30%; transform: rotate(540deg) scale(0.5); } }
+
 /* responsive */
 @media (max-width: 760px) {
   #game-shell { border-radius: 0; width: 100vw; }
