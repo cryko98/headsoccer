@@ -3,50 +3,48 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>World Cup 2026 · Head Soccer — $GOAL Play-to-Earn</title>
-  <meta name="description" content="2026 World Cup Head Soccer — a Solana $GOAL play-to-earn arcade football game." />
+  <title>Impostor Station — social deduction game</title>
+  <meta name="description" content="Impostor Station — a browser social-deduction game. Do tasks, find the impostors, vote them out." />
   <link rel="stylesheet" href="css/style.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='11' fill='%23fff' stroke='%23222'/><path d='M12 6l4 3-1.5 4.5h-5L8 9z' fill='%23222'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='26' r='18' fill='%23e2333a'/><ellipse cx='36' cy='24' rx='9' ry='7' fill='%239fd3ff'/><rect x='18' y='40' width='28' height='16' rx='8' fill='%23b3262c'/></svg>" />
 </head>
 <body>
   <div id="game-shell">
     <canvas id="game-canvas"></canvas>
 
-    <!-- Top corner buttons -->
-    <button id="home-btn" class="corner-btn" title="Menu"></button>
-    <button id="mute-btn" class="corner-btn corner-right" title="Mute"></button>
-    <button id="wallet-btn" class="wallet-btn"></button>
-
-    <!-- In-match HUD -->
-    <div id="hud">
-      <div id="hud-stage" class="hud-stage"></div>
-      <div class="hud-bar">
-        <div class="hud-team" id="hud-p1"><span class="h-flag"></span><span class="h-name">P1</span></div>
-        <div class="hud-center">
-          <div id="hud-score" class="hud-score">0 - 0</div>
-          <div class="hud-timer"><span id="hud-time">60</span></div>
-        </div>
-        <div class="hud-team right" id="hud-p2"><span class="h-name">CPU</span><span class="h-flag"></span></div>
-      </div>
-      <div class="hud-power"><div class="hud-power-label">POWER</div><div class="hud-power-track"><div id="hud-power-fill"></div></div></div>
+    <!-- Top bar -->
+    <div id="topbar">
+      <button id="menu-btn" class="top-btn">MENU</button>
+      <button id="mute-btn" class="top-btn">SOUND ON</button>
     </div>
 
-    <div id="reward-float"></div>
+    <!-- In-game HUD -->
+    <div id="hud">
+      <div id="taskbar"><div id="taskbar-fill"></div><span id="taskbar-pct">TASKS 0%</span></div>
+      <div id="alarm"></div>
+      <div id="tasklist"></div>
+      <div id="actions"></div>
+      <div id="ghost-banner">GHOST</div>
+    </div>
+
+    <!-- Overlays -->
+    <div id="role-overlay" class="overlay"></div>
+    <div id="task-overlay" class="overlay"></div>
+    <div id="meeting-overlay" class="overlay"></div>
+    <div id="sab-menu" class="overlay"></div>
+    <div id="over-overlay" class="overlay"></div>
+    <div id="menu" class="overlay"></div>
     <div id="toast"></div>
-    <div id="menu"></div>
-    <div id="overlay"></div>
-    <div id="wallet-panel"></div>
-    <span id="goal-balance" hidden>0</span>
   </div>
 
   <script src="js/config.js"></script>
-  <script src="js/flags.js"></script>
-  <script src="js/icons.js"></script>
-  <script src="js/physics.js"></script>
   <script src="js/audio.js"></script>
-  <script src="js/wallet.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/map.js"></script>
   <script src="js/entities.js"></script>
+  <script src="js/tasks.js"></script>
   <script src="js/ai.js"></script>
+  <script src="js/meeting.js"></script>
   <script src="js/game.js"></script>
   <script src="js/ui.js"></script>
   <script>

@@ -1,89 +1,128 @@
 /* ============================================================================
- *  WORLD CUP 2026 HEAD SOCCER — $GOAL Play-to-Earn
- *  config.js — global constants, team roster, token economy
+ *  IMPOSTOR STATION — a single-player social-deduction game.
+ *  Original code & art, inspired by the "impostor" genre. config.js
  * ========================================================================== */
 
-const CONFIG = {
-  // --- Canvas / world ---
-  WIDTH: 1000,
-  HEIGHT: 560,
-  HORIZON: 250,           // where the crowd meets the green pitch
-  GROUND_Y: 432,          // play baseline (feet / ball rest); pitch continues below
-  BODY_H: 22,             // tiny body height drawn under the head
-  GOAL_WIDTH: 70,
-  GOAL_HEIGHT: 132,       // goal stands ON the pitch (crossbar at GROUND_Y - this)
-  GOAL_DEPTH: 30,         // visual 3D net depth
-  WALL_PAD: 10,
+const CFG = {
+  WORLD_W: 1900,
+  WORLD_H: 1300,
 
-  // --- Physics (tuned for a heavier, more controllable ball) ---
-  GRAVITY: 1650,          // px / s^2  (was 2100 — floatier, easier to read)
-  AIR_FRICTION: 0.9965,
-  GROUND_FRICTION: 0.82,
-  BALL_RESTITUTION: 0.62, // less bouncy
-  BALL_RADIUS: 22,
-  MAX_BALL_SPEED: 880,    // hard clamp so shots stay readable
-  BALL_LIVELINESS: 0.6,   // s of near-rest before a gentle nudge keeps it moving
-  PLAYER_RADIUS: 52,
-  MAX_DT: 1 / 30,
+  PLAYER_R: 22,
+  MOVE_SPEED: 230,            // px/s
+  BOT_SPEED: 205,
 
-  // --- Player movement ---
-  MOVE_SPEED: 360,
-  JUMP_VELOCITY: 760,
-  KICK_RANGE: 98,
-  KICK_POWER: 720,        // base kick (was 1180)
-  POWER_SHOT_MULT: 1.55,
-  POWER_CHARGE_TIME: 1.1, // seconds to fully charge the power meter
-  KICK_COOLDOWN: 0.22,
+  KILL_RANGE: 88,
+  KILL_COOLDOWN: 24,         // s
+  USE_RANGE: 78,
+  REPORT_RANGE: 110,
+  INTERACT_RANGE: 70,
 
-  // --- Match ---
-  MATCH_SECONDS: 75,
+  VISION_CREW: 300,          // crewmate sight radius
+  VISION_IMPOSTOR: 560,      // impostors see further
+  VISION_LIGHTS_OUT: 150,    // crewmate sight when lights sabotaged
 
-  // --- P2E token economy ($GOAL) ---
-  TOKEN: {
-    SYMBOL: '$GOAL',
-    NAME: 'GoalCoin',
-    PER_GOAL: 12,
-    WIN_BONUS: 60,
-    CLEAN_SHEET_BONUS: 40,
-    TOURNAMENT_STAGE_BONUS: 150,
-    TOURNAMENT_WIN_BONUS: 1000,
-    DAILY_REWARD: 25,
-    NETWORK: 'solana-mainnet-beta',
-    MINT: 'GoaLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx2026', // placeholder
-    DECIMALS: 6,
-  },
+  NUM_PLAYERS: 8,
+  NUM_IMPOSTORS: 2,
+  TASKS_PER_CREW: 5,
+  EMERGENCY_USES: 1,
+
+  MEETING_DISCUSS: 14,       // s discussion
+  MEETING_VOTE: 18,          // s voting
+  EJECT_REVEAL: true,
+
+  REACTOR_COUNTDOWN: 30,     // s before impostors win if not fixed
+  SABOTAGE_COOLDOWN: 18,
 };
 
-/* 2026 World Cup themed national sides.
- *  primary/secondary = jersey palette · skin/hair = procedural head renderer
- *  hairStyle: 0 short · 1 buzz · 2 swept · 3 curly/afro · 4 bald · 5 long
- *  flag = structured descriptor rendered procedurally (no emoji). */
-const TEAMS = [
-  { id: 'usa', name: 'USA',         primary: '#1c3f94', secondary: '#ffffff', accent: '#bf0a30', skin: '#e8b48c', hair: '#5b3a22', hairStyle: 2, flag: { type: 'usa' } },
-  { id: 'mex', name: 'Mexico',      primary: '#006847', secondary: '#ffffff', accent: '#ce1126', skin: '#c98a5e', hair: '#1c130d', hairStyle: 0, flag: { type: 'v3', c: ['#006847', '#ffffff', '#ce1126'] } },
-  { id: 'can', name: 'Canada',      primary: '#d52b1e', secondary: '#ffffff', accent: '#d52b1e', skin: '#e0a878', hair: '#7a4a26', hairStyle: 5, flag: { type: 'canada' } },
-  { id: 'arg', name: 'Argentina',   primary: '#74acdf', secondary: '#ffffff', accent: '#f6b40e', skin: '#d99a6c', hair: '#241712', hairStyle: 2, beard: true, flag: { type: 'h3s', c: ['#74acdf', '#ffffff', '#74acdf'], em: '#f6b40e' } },
-  { id: 'bra', name: 'Brazil',      primary: '#ffdf00', secondary: '#009b3a', accent: '#002776', skin: '#8d5a3c', hair: '#0e0a06', hairStyle: 3, flag: { type: 'brazil' } },
-  { id: 'fra', name: 'France',      primary: '#0055a4', secondary: '#ffffff', accent: '#ef4135', skin: '#6f4a32', hair: '#0e0a06', hairStyle: 1, beard: true, flag: { type: 'v3', c: ['#0055a4', '#ffffff', '#ef4135'] } },
-  { id: 'eng', name: 'England',     primary: '#ffffff', secondary: '#1d3a8a', accent: '#cf081f', skin: '#e0a878', hair: '#caa06a', hairStyle: 2, flag: { type: 'cross', c: ['#ffffff', '#cf081f'] } },
-  { id: 'esp', name: 'Spain',       primary: '#c60b1e', secondary: '#ffc400', accent: '#ffc400', skin: '#d99a6c', hair: '#1c130d', hairStyle: 0, flag: { type: 'h3', c: ['#c60b1e', '#ffc400', '#c60b1e'], ratio: [1, 2, 1] } },
-  { id: 'ger', name: 'Germany',     primary: '#1a1a1a', secondary: '#ffffff', accent: '#dd0000', skin: '#e0a878', hair: '#c8a25a', hairStyle: 2, flag: { type: 'h3', c: ['#111111', '#dd0000', '#ffce00'] } },
-  { id: 'por', name: 'Portugal',    primary: '#006600', secondary: '#ff0000', accent: '#ffd000', skin: '#c98a5e', hair: '#0e0a06', hairStyle: 0, flag: { type: 'v2', c: ['#006600', '#ff0000'], em: '#ffd000' } },
-  { id: 'ned', name: 'Netherlands', primary: '#ff6c00', secondary: '#ffffff', accent: '#21468b', skin: '#e0a878', hair: '#caa06a', hairStyle: 2, flag: { type: 'h3', c: ['#ae1c28', '#ffffff', '#21468b'] } },
-  { id: 'jpn', name: 'Japan',       primary: '#0a2987', secondary: '#ffffff', accent: '#bc002d', skin: '#e6bd8f', hair: '#0a0a0a', hairStyle: 0, flag: { type: 'disc', c: ['#ffffff', '#bc002d'] } },
-  { id: 'kor', name: 'Korea Rep.',  primary: '#c8102e', secondary: '#ffffff', accent: '#003478', skin: '#e6bd8f', hair: '#0a0a0a', hairStyle: 0, flag: { type: 'korea' } },
-  { id: 'mar', name: 'Morocco',     primary: '#c1272d', secondary: '#006233', accent: '#006233', skin: '#a9744f', hair: '#0e0a06', hairStyle: 0, flag: { type: 'star', c: ['#c1272d', '#006233'] } },
-  { id: 'cro', name: 'Croatia',     primary: '#ff0000', secondary: '#ffffff', accent: '#171796', skin: '#d99a6c', hair: '#5b3a22', hairStyle: 0, beard: true, flag: { type: 'h3', c: ['#ff0000', '#ffffff', '#171796'] } },
-  { id: 'bel', name: 'Belgium',     primary: '#e30613', secondary: '#1a1a1a', accent: '#fdda24', skin: '#e0a878', hair: '#3a2414', hairStyle: 2, beard: true, flag: { type: 'v3', c: ['#111111', '#fdda24', '#e30613'] } },
+// Crewmate colours (name → hex). Original palette.
+const COLORS = [
+  { id: 'red',    name: 'Red',    hex: '#e2333a' },
+  { id: 'blue',   name: 'Blue',   hex: '#1f6fe0' },
+  { id: 'green',  name: 'Green',  hex: '#33b14b' },
+  { id: 'pink',   name: 'Pink',   hex: '#ec5fb0' },
+  { id: 'orange', name: 'Orange', hex: '#ef8a2b' },
+  { id: 'yellow', name: 'Yellow', hex: '#f4d13d' },
+  { id: 'cyan',   name: 'Cyan',   hex: '#46c7d4' },
+  { id: 'lime',   name: 'Lime',   hex: '#88d039' },
+  { id: 'purple', name: 'Purple', hex: '#7b3fe4' },
+  { id: 'white',  name: 'White',  hex: '#e8ecf5' },
 ];
 
-// Difficulty presets used by the AI controller.
-const DIFFICULTY = {
-  easy:   { reaction: 0.30, speedMult: 0.74, jumpChance: 0.30, aggression: 0.55, errorPx: 80, label: 'EASY' },
-  normal: { reaction: 0.18, speedMult: 0.90, jumpChance: 0.50, aggression: 0.72, errorPx: 46, label: 'NORMAL' },
-  hard:   { reaction: 0.10, speedMult: 1.00, jumpChance: 0.70, aggression: 0.85, errorPx: 22, label: 'HARD' },
-  legend: { reaction: 0.05, speedMult: 1.08, jumpChance: 0.85, aggression: 0.95, errorPx: 9,  label: 'LEGEND' },
-};
+// Bot display names.
+const BOT_NAMES = ['NOVA', 'ORBIT', 'COMET', 'PIXEL', 'ECHO', 'ZARA', 'BOLT', 'LUNA', 'RIVET', 'SABLE'];
 
-// 8-stage single-player tournament → 2026 World Cup "Road to Glory".
-const TOURNAMENT_STAGES = ['Group Stage', 'Round of 16', 'Quarter-Final', 'Semi-Final', 'FINAL'];
+/* Station rooms (world coords). Rooms are walkable rectangles; corridors below
+ * stitch them into one connected floor. */
+const ROOMS = [
+  { id: 'medbay',   name: 'MedBay',      x: 120,  y: 120,  w: 340, h: 250 },
+  { id: 'cafe',     name: 'Cafeteria',   x: 740,  y: 90,   w: 420, h: 300 },
+  { id: 'weapons',  name: 'Weapons',     x: 1440, y: 120,  w: 340, h: 250 },
+  { id: 'electric', name: 'Electrical',  x: 120,  y: 540,  w: 340, h: 240 },
+  { id: 'reactor',  name: 'Reactor',     x: 760,  y: 540,  w: 380, h: 240 },
+  { id: 'nav',      name: 'Navigation',  x: 1440, y: 540,  w: 340, h: 240 },
+  { id: 'storage',  name: 'Storage',     x: 120,  y: 950,  w: 340, h: 250 },
+  { id: 'engine',   name: 'Engine',      x: 740,  y: 950,  w: 420, h: 250 },
+  { id: 'shields',  name: 'Shields',     x: 1440, y: 950,  w: 340, h: 250 },
+];
+
+// Connecting corridors (walkable). Width ~90 to feel roomy.
+const CORRIDORS = [
+  // Horizontal between columns, on each row's vertical centre.
+  { x: 440, y: 205, w: 320, h: 90 },   // medbay-cafe
+  { x: 1140, y: 205, w: 320, h: 90 },  // cafe-weapons
+  { x: 440, y: 615, w: 340, h: 90 },   // electric-reactor
+  { x: 1120, y: 615, w: 340, h: 90 },  // reactor-nav
+  { x: 440, y: 1035, w: 320, h: 90 },  // storage-engine
+  { x: 1140, y: 1035, w: 320, h: 90 }, // engine-shields
+  // Vertical between rows, on each column's centre.
+  { x: 245, y: 350, w: 90, h: 210 },   // medbay-electric
+  { x: 245, y: 760, w: 90, h: 210 },   // electric-storage
+  { x: 905, y: 370, w: 90, h: 190 },   // cafe-reactor
+  { x: 905, y: 760, w: 90, h: 210 },   // reactor-engine
+  { x: 1565, y: 350, w: 90, h: 210 },  // weapons-nav
+  { x: 1565, y: 760, w: 90, h: 210 },  // nav-shields
+];
+
+/* Task definitions. type drives the minigame. Each entry is one task instance
+ * placed in a room. assignable tasks are pooled and dealt to crewmates. */
+const TASK_DEFS = [
+  { id: 'wires_caf',   room: 'cafe',     name: 'Fix Wiring',        type: 'wires',   x: 880,  y: 150 },
+  { id: 'wires_nav',   room: 'nav',      name: 'Fix Wiring',        type: 'wires',   x: 1520, y: 600 },
+  { id: 'wires_str',   room: 'storage',  name: 'Fix Wiring',        type: 'wires',   x: 200,  y: 1010 },
+  { id: 'down_weap',   room: 'weapons',  name: 'Download Data',     type: 'download',x: 1520, y: 180 },
+  { id: 'up_admin',    room: 'reactor',  name: 'Upload Data',       type: 'download',x: 840,  y: 600 },
+  { id: 'card_med',    room: 'medbay',   name: 'Swipe Card',        type: 'card',    x: 200,  y: 180 },
+  { id: 'card_shd',    room: 'shields',  name: 'Swipe Card',        type: 'card',    x: 1520, y: 1010 },
+  { id: 'keypad_reac', room: 'reactor',  name: 'Start Reactor',     type: 'keypad',  x: 1040, y: 600 },
+  { id: 'keypad_nav',  room: 'nav',      name: 'Chart Course',      type: 'keypad',  x: 1660, y: 600 },
+  { id: 'fuel_eng',    room: 'engine',   name: 'Fuel Engine',       type: 'hold',    x: 840,  y: 1010 },
+  { id: 'fuel_eng2',   room: 'engine',   name: 'Calibrate Engine',  type: 'hold',    x: 1040, y: 1010 },
+  { id: 'aim_weap',    room: 'weapons',  name: 'Clear Asteroids',   type: 'asteroids',x: 1660, y: 180 },
+  { id: 'aim_med',     room: 'medbay',   name: 'Submit Scan',       type: 'hold',    x: 360,  y: 180 },
+  { id: 'wires_ele',   room: 'electric', name: 'Fix Wiring',        type: 'wires',   x: 200,  y: 600 },
+];
+
+// Vent groups — impostor cycles between vents in the same group.
+const VENT_GROUPS = [
+  [ { room: 'medbay', x: 150, y: 330 }, { room: 'electric', x: 150, y: 560 }, { room: 'reactor', x: 790, y: 740 } ],
+  [ { room: 'weapons', x: 1750, y: 330 }, { room: 'nav', x: 1750, y: 560 }, { room: 'shields', x: 1750, y: 980 } ],
+  [ { room: 'cafe', x: 1120, y: 120 }, { room: 'storage', x: 150, y: 980 }, { room: 'engine', x: 1130, y: 1170 } ],
+];
+
+// Emergency button location (in cafeteria).
+const EMERGENCY_BTN = { x: 950, y: 240 };
+
+const Util = {
+  clamp: (v, a, b) => v < a ? a : v > b ? b : v,
+  dist: (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by),
+  lerp: (a, b, t) => a + (b - a) * t,
+  rand: (a, b) => a + Math.random() * (b - a),
+  pick: arr => arr[Math.floor(Math.random() * arr.length)],
+  shuffle: arr => { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; },
+  roomAt(x, y) { return ROOMS.find(r => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h); },
+  inWalkable(x, y) {
+    for (const r of ROOMS) if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return true;
+    for (const c of CORRIDORS) if (x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h) return true;
+    return false;
+  },
+};

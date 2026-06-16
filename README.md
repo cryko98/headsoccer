@@ -1,43 +1,34 @@
-<h1 align="center">⚽ World Cup 2026 · Head Soccer</h1>
-<p align="center"><b>A Solana <code>$GOAL</code> Play-to-Earn arcade football game</b></p>
+<h1 align="center">🛰️ IMPOSTOR STATION</h1>
+<p align="center"><b>A browser social-deduction game — do your tasks, find the impostors, vote them out.</b></p>
 
 <p align="center">
   <img alt="HTML5" src="https://img.shields.io/badge/HTML5-Canvas-orange">
   <img alt="JavaScript" src="https://img.shields.io/badge/Vanilla-JS-yellow">
-  <img alt="Solana" src="https://img.shields.io/badge/Solana-P2E-14F195">
   <img alt="No build" src="https://img.shields.io/badge/build-none-brightgreen">
+  <img alt="Single player" src="https://img.shields.io/badge/mode-single--player%20vs%20bots-blue">
 </p>
 
-A fast, arcade-style **Head Soccer** game themed around the **2026 FIFA World Cup**, with a built-in
-**Play-to-Earn** layer for the Solana memecoin **`$GOAL`**. Pick your nation, smash the ball into the
-net, and earn `$GOAL` tokens for goals, wins, clean sheets and tournament glory — then claim them to
-your Phantom wallet.
+A single-player, browser-based **social-deduction game** inspired by the "impostor" genre.
+Crewmates race to finish station tasks and identify the impostors hiding among them; impostors
+pick off the crew, sabotage systems, and slip through the vents without getting caught. Everything
+is rendered procedurally on an HTML5 `<canvas>` and runs as **static files** — no build, no
+framework, no backend.
 
-Everything is rendered procedurally on an HTML5 `<canvas>` (no image/audio assets) and the whole game
-runs as **static files** — no build step, no framework, no backend required to play.
+> Original game: original code, art, station layout, names and tasks. Not affiliated with, and not
+> reusing the assets of, any existing game — only the (uncopyrightable) genre mechanics.
 
 ---
 
 ## ✨ Features
 
-- **🌍 16 national sides** with authentic kit colours (USA, Mexico, Canada, Argentina, Brazil, France, England, Spain, Germany, …).
-- **🎮 Two game modes**
-  - **Quick Match** — one-off game vs. CPU with sudden-death on a draw.
-  - **🏆 Road to Glory** — 5-stage World Cup bracket (Group Stage → Final) with rising difficulty.
-- **🤖 4 AI difficulty tiers** — Easy / Normal / Hard / Legend, each with distinct reaction, speed and aggression.
-- **⚡ Real physics** — gravity, ball restitution, momentum transfer on headers, charge-up **power shots**.
-- **💰 `$GOAL` Play-to-Earn economy**
-  | Action | Reward |
-  |---|---|
-  | Goal scored | `+12 $GOAL` |
-  | Match win | `+60 $GOAL` |
-  | Clean sheet | `+40 $GOAL` |
-  | Tournament stage cleared | `+150 $GOAL` |
-  | **World Cup won** | `+1000 $GOAL` |
-  | Daily login | `+25 $GOAL` |
-- **👛 Phantom wallet integration** — connect, accrue off-chain, and **claim** to your wallet (with a DEMO fallback when no wallet is installed, so the full loop is always playable).
-- **🔊 Procedural audio** — synthesized kicks, crowd roar, whistle and goal jingles via the Web Audio API.
-- **📱 Responsive** — scales to desktop and mobile viewports.
+- **🎭 Roles** — each round you're randomly a **Crewmate** or an **Impostor** (or force a side from the menu).
+- **🤖 7 AI bots** that navigate the station, do tasks, kill, vent, report bodies and **vote** in meetings.
+- **🗺️ A connected 9-room station** (Cafeteria, Reactor, Electrical, Navigation, MedBay, Weapons, Storage, Engine, Shields) with corridors, vents and a fog-of-war **vision** system.
+- **🧰 6 task minigames** — wiring, data download/upload, card swipe, code keypad, hold-to-fill, and an asteroid-clearing task. A shared **task bar** tracks crew progress.
+- **🔪 Impostor toolkit** — proximity **kills** on a cooldown, **vents** that teleport between connected rooms, and **sabotages** (kill the lights to blind the crew, or trigger a reactor meltdown countdown).
+- **🚨 Emergency meetings & voting** — report a body or hit the emergency button to start a discussion → vote → ejection, with the classic role reveal.
+- **🏆 Win conditions** — crew win by finishing every task or ejecting all impostors; impostors win by reaching numerical parity or letting the reactor melt down.
+- **🔊 Procedural audio** — synthesized footsteps, task jingles, kill stinger, meeting alarm and more via the Web Audio API.
 
 ---
 
@@ -45,28 +36,40 @@ runs as **static files** — no build step, no framework, no backend required to
 
 | Action | Keys |
 |---|---|
-| Move | `◀` `▶` &nbsp;/&nbsp; `A` `D` |
-| Jump | `▲` &nbsp;/&nbsp; `W` &nbsp;/&nbsp; `Space` |
-| Shoot / Kick | `X` `Z` &nbsp;/&nbsp; `▼` `S` &nbsp;— *hold to charge a power shot* |
+| Move | `W A S D` / Arrow keys |
+| Use / do task / vent / fix | `E` (or **USE** button) |
+| Report body | `R` |
+| Kill (impostor) | `Q` |
+| Sabotage (impostor) | `F` |
 
-Stand next to the ball and press shoot to kick. **Hold** shoot to build the power meter (top of screen) for a
-much harder, goal-bound strike.
+On-screen action buttons mirror the keys, so it's fully playable with a mouse too.
+
+---
+
+## 🎯 How to play
+
+**As a Crewmate** — walk to the glowing task markers and complete the minigames to fill the task bar.
+If you find a body, press **R** to report it and argue your case in the meeting. Watch who's near
+bodies, who vents, and who never seems to do tasks.
+
+**As an Impostor** — blend in by faking tasks, isolate a crewmate and press **Q** to eliminate them,
+then **vent** away or call **sabotage (F)** to split the crew. Don't get caught on cooldown next to a
+fresh body. Reach parity with the crew and the station is yours.
 
 ---
 
 ## 🚀 Run locally
 
-It's static — any HTTP server works:
+Static files — any HTTP server works:
 
 ```bash
-# Option A — Node
+# Node
 npx serve -l 5050 .
-
-# Option B — Python
+# or Python
 python -m http.server 5050
 ```
 
-Then open <http://localhost:5050>. (Opening `index.html` directly works too, though a server is recommended for the Web Audio autoplay policy.)
+Open <http://localhost:5050>.
 
 ---
 
@@ -75,38 +78,23 @@ Then open <http://localhost:5050>. (Opening `index.html` directly works too, tho
 ```
 .
 ├── index.html          # shell + DOM overlays, loads scripts in order
-├── css/
-│   └── style.css       # full UI theme
+├── css/style.css       # full UI + minigame theme
 └── js/
-    ├── config.js       # constants, 16-team roster, $GOAL token economy
-    ├── physics.js      # vector math + circle collision resolution
-    ├── audio.js        # Web Audio synthesized SFX + crowd ambience
-    ├── wallet.js       # Solana / Phantom P2E ledger + claim flow
-    ├── entities.js     # Ball, Player (procedural heads), Goal
-    ├── ai.js           # CPU opponent controller
-    ├── game.js         # engine: loop, match flow, tournament, rendering
-    └── ui.js           # menus, HUD, results, wallet panel
+    ├── config.js       # world, rooms, corridors, tasks, vents, colours, tuning
+    ├── audio.js        # Web Audio synthesized SFX
+    ├── input.js        # keyboard + action edges
+    ├── map.js          # floor render, collision, vents, bot waypoint graph (BFS)
+    ├── entities.js     # Crewmate (player + bots) + Corpse — procedural astronaut art
+    ├── tasks.js        # task minigame overlays
+    ├── ai.js           # bot behaviour (crew + impostor) and voting heuristics
+    ├── meeting.js      # emergency meeting + voting flow
+    ├── game.js         # engine: loop, camera, vision, interactions, sabotage, win logic
+    └── ui.js           # HUD, menu, role reveal, action buttons, sabotage menu, game-over
 ```
-
----
-
-## 🔗 Going on-chain (real `$GOAL` mint)
-
-The economy is **off-chain by default** — rewards accrue locally and settle to the wallet on **claim**.
-To make claims transfer a real SPL token:
-
-1. Create your `$GOAL` SPL mint on Solana and set `CONFIG.TOKEN.MINT` / `DECIMALS` in [`js/config.js`](js/config.js).
-2. Stand up a small backend (reward authority) that signs SPL transfers of the claimed amount to the player's address.
-3. Replace the **DEMO settlement** block in `claimToChain()` inside [`js/wallet.js`](js/wallet.js) with a `fetch()` to that backend, returning the confirmed transaction signature.
-
-The connect / accrue / claim UX and all integration points are already wired — only the settlement call needs swapping.
-
-> ⚠️ This repository ships a **placeholder** mint address and a demo settlement path. Do your own
-> security review and audit before handling real funds. Not financial advice.
 
 ---
 
 ## 📜 License
 
-MIT — see [`LICENSE`](LICENSE). Original game built from scratch; not affiliated with FIFA or any third party.
-Country names/flags are used nominally for a sports theme.
+MIT — see [`LICENSE`](LICENSE). Original work; the social-deduction format is a game genre, and all
+code and art here are written from scratch.
