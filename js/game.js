@@ -107,7 +107,7 @@ const Game = (() => {
 
     // P2E: player earns $GOAL only for their own goals.
     if (scorer === 'p1') {
-      const c = Wallet.award(CONFIG.TOKEN.PER_GOAL, 'Goal scored ⚽');
+      const c = Wallet.award(CONFIG.TOKEN.PER_GOAL, 'Goal scored');
       state.coinsThisMatch += c;
     }
     UI.syncHUD(state);
@@ -142,11 +142,11 @@ const Game = (() => {
 
     let summary = { won, draw, rewards: [] };
     if (won) {
-      const wb = Wallet.award(CONFIG.TOKEN.WIN_BONUS, 'Match win 🏆');
+      const wb = Wallet.award(CONFIG.TOKEN.WIN_BONUS, 'Match win');
       summary.rewards.push([`Win bonus`, wb]);
       state.coinsThisMatch += wb;
       if (state.score.p2 === 0) {
-        const cs = Wallet.award(CONFIG.TOKEN.CLEAN_SHEET_BONUS, 'Clean sheet 🧤');
+        const cs = Wallet.award(CONFIG.TOKEN.CLEAN_SHEET_BONUS, 'Clean sheet');
         summary.rewards.push([`Clean sheet`, cs]);
         state.coinsThisMatch += cs;
       }
@@ -191,7 +191,7 @@ const Game = (() => {
     const aiIn = ai.think(dt);
 
     p1.update(dt, p1Input);
-    p2.update(dt, { left: aiIn.left, right: aiIn.right, jump: aiIn.jump, shoot: aiIn.shoot });
+    p2.update(dt, { left: aiIn.left, right: aiIn.right, jump: aiIn.jump, shoot: aiIn.shoot, speedScale: aiIn.speedScale });
 
     ball.update(dt);
 
@@ -275,13 +275,18 @@ const Game = (() => {
       ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.GROUND_Y);
     }
 
-    // Banner.
-    ctx.fillStyle = 'rgba(255,255,255,0.04)';
-    ctx.fillRect(0, 185, CONFIG.WIDTH, 30);
-    ctx.fillStyle = 'rgba(255,255,255,0.25)';
-    ctx.font = 'bold 16px "Segoe UI", system-ui, sans-serif';
+    // LED sponsor board.
+    const board = ctx.createLinearGradient(0, 183, 0, 215);
+    board.addColorStop(0, 'rgba(255,255,255,0.10)');
+    board.addColorStop(1, 'rgba(255,255,255,0.02)');
+    ctx.fillStyle = board;
+    ctx.fillRect(0, 184, CONFIG.WIDTH, 30);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(0, 213, CONFIG.WIDTH, 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.28)';
+    ctx.font = '700 15px "Segoe UI", system-ui, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('★  FIFA WORLD CUP 2026  ★  $GOAL  ★  PLAY TO EARN  ★  WORLD CUP 2026  ★  $GOAL  ★', CONFIG.WIDTH / 2, 206);
+    const msg = 'WORLD CUP 2026     ·     $GOAL  PLAY TO EARN     ·     HEAD SOCCER     ·     ';
+    ctx.fillText(msg + msg, CONFIG.WIDTH / 2, 204);
     ctx.textAlign = 'left';
 
     // Pitch.
@@ -366,7 +371,7 @@ const Game = (() => {
     nextTournamentMatch() {
       state.stageIndex++;
       if (state.stageIndex >= TOURNAMENT_STAGES.length) {
-        Wallet.award(CONFIG.TOKEN.TOURNAMENT_WIN_BONUS, 'WORLD CHAMPIONS 🏆🏆');
+        Wallet.award(CONFIG.TOKEN.TOURNAMENT_WIN_BONUS, 'World champions');
         UI.showChampion(state);
         state.stageIndex = 0;
         return;

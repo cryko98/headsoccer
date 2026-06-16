@@ -111,7 +111,7 @@ const Wallet = (() => {
     await new Promise(r => setTimeout(r, 800));
     state.claimedTotal += amount;
     state.pendingRewards = 0;
-    state.history.unshift({ amount, reason: 'Claimed to wallet ✅', t: nowStamp(), claim: true });
+    state.history.unshift({ amount, reason: 'Claimed to wallet', t: nowStamp(), claim: true });
     save();
     Sound.coin();
     return {

@@ -6,53 +6,42 @@
   <title>World Cup 2026 · Head Soccer — $GOAL Play-to-Earn</title>
   <meta name="description" content="2026 World Cup Head Soccer — a Solana $GOAL play-to-earn arcade football game." />
   <link rel="stylesheet" href="css/style.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='11' fill='%23fff' stroke='%23222'/><path d='M12 6l4 3-1.5 4.5h-5L8 9z' fill='%23222'/></svg>" />
 </head>
 <body>
   <div id="game-shell">
-    <!-- Canvas pitch -->
     <canvas id="game-canvas"></canvas>
 
     <!-- Top corner buttons -->
-    <button id="home-btn" class="corner-btn" title="Menu">🏠</button>
-    <button id="mute-btn" class="corner-btn corner-right" title="Mute">🔊</button>
-    <button id="wallet-btn" class="wallet-btn">🔗 Connect Wallet</button>
+    <button id="home-btn" class="corner-btn" title="Menu"></button>
+    <button id="mute-btn" class="corner-btn corner-right" title="Mute"></button>
+    <button id="wallet-btn" class="wallet-btn"></button>
 
     <!-- In-match HUD -->
     <div id="hud">
       <div id="hud-stage" class="hud-stage"></div>
       <div class="hud-bar">
-        <div class="hud-team" id="hud-p1"><span class="h-flag">🏳️</span><span class="h-name">P1</span></div>
+        <div class="hud-team" id="hud-p1"><span class="h-flag"></span><span class="h-name">P1</span></div>
         <div class="hud-center">
           <div id="hud-score" class="hud-score">0 - 0</div>
-          <div class="hud-timer">⏱ <span id="hud-time">60</span></div>
+          <div class="hud-timer"><span id="hud-time">60</span></div>
         </div>
-        <div class="hud-team right" id="hud-p2"><span class="h-name">CPU</span><span class="h-flag">🏳️</span></div>
+        <div class="hud-team right" id="hud-p2"><span class="h-name">CPU</span><span class="h-flag"></span></div>
       </div>
       <div class="hud-power"><div class="hud-power-label">POWER</div><div class="hud-power-track"><div id="hud-power-fill"></div></div></div>
     </div>
 
-    <!-- Floating reward popup -->
     <div id="reward-float"></div>
-
-    <!-- Toast -->
     <div id="toast"></div>
-
-    <!-- Main menu (DOM overlay) -->
     <div id="menu"></div>
-
-    <!-- Result / champion overlay -->
     <div id="overlay"></div>
-
-    <!-- Wallet panel -->
     <div id="wallet-panel"></div>
-
-    <!-- Hidden live balance mirror (optional) -->
     <span id="goal-balance" hidden>0</span>
   </div>
 
-  <!-- Scripts: order matters -->
   <script src="js/config.js"></script>
+  <script src="js/flags.js"></script>
+  <script src="js/icons.js"></script>
   <script src="js/physics.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/wallet.js"></script>
@@ -64,7 +53,6 @@
     window.addEventListener('DOMContentLoaded', () => {
       Game.init(document.getElementById('game-canvas'));
       UI.init();
-      // Resume audio on first interaction (browser autoplay policy).
       const resume = () => { Sound.init(); Sound.resume(); window.removeEventListener('pointerdown', resume); };
       window.addEventListener('pointerdown', resume);
     });

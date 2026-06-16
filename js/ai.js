@@ -1,6 +1,6 @@
 /* ============================================================================
- *  ai.js — CPU opponent controller. Produces an input object identical in
- *  shape to player keyboard input so the Player class stays agnostic.
+ *  ai.js — CPU opponent controller. Emits the same input shape as the player
+ *  keyboard, plus `speedScale` (movement multiplier) and `wantKick`.
  * ========================================================================== */
 
 class AIController {
@@ -10,86 +10,64 @@ class AIController {
     this.cfg = DIFFICULTY[difficulty] || DIFFICULTY.normal;
     this.reactTimer = 0;
     this.target = player.x;
-    this.kickCooldown = 0;
+    this.jumpCool = 0;
   }
 
   setDifficulty(d) { this.cfg = DIFFICULTY[d] || DIFFICULTY.normal; }
 
-  /* Returns { left, right, jump, shoot, power } and may directly request a
-   * kick via game callback. We expose desired kick through `wantKick`. */
   think(dt) {
-    const c = this.cfg;
+    const c = this.cfg, p = this.p, ball = this.ball;
     this.reactTimer -= dt;
-    this.kickCooldown -= dt;
+    this.jumpCool -= dt;
 
-    const input = { left: false, right: false, jump: false, shoot: false, power: false, wantKick: false };
-    const ball = this.ball;
-    const ownGoalX = this.p.side === 'left' ? 0 : CONFIG.WIDTH; // defends this side
-    const oppGoalX = this.p.side === 'left' ? CONFIG.WIDTH : 0;
+    const input = { left: false, right: false, jump: false, shoot: false, power: false, wantKick: false, speedScale: c.speedMult };
 
-    // Predict where the ball will be a moment ahead.
-    const lead = 0.18;
-    const predX = ball.x + ball.vx * lead;
+    const defendX = p.side === 'left' ? CONFIG.WIDTH * 0.26 : CONFIG.WIDTH * 0.74;
+    const ourHalf = p.side === 'left' ? ball.x < CONFIG.WIDTH * 0.5 : ball.x > CONFIG.WIDTH * 0.5;
 
-    // Re-evaluate target only every reaction interval (simulates human delay).
+    // Predict ball a beat ahead; recompute target on the reaction clock.
     if (this.reactTimer <= 0) {
       this.reactTimer = c.reaction;
       const err = (Math.random() * 2 - 1) * c.errorPx;
+      const predX = ball.x + ball.vx * 0.16;
 
-      // Defensive: if the ball is heading toward our goal and is on our side, intercept.
-      const onOurSide = this.p.side === 'left' ? ball.x < CONFIG.WIDTH * 0.45 : ball.x > CONFIG.WIDTH * 0.55;
-      const ballComingHome = this.p.side === 'left' ? ball.vx < -40 : ball.vx > 40;
-
-      if (onOurSide || ballComingHome) {
-        // Get goal-side of the ball to clear it away.
-        const goalSideOffset = this.p.side === 'left' ? -this.p.r * 0.4 : this.p.r * 0.4;
-        this.target = predX + goalSideOffset + err;
+      if (ourHalf) {
+        // Get goal-side of the ball so a kick clears it away from our net.
+        const goalSide = p.side === 'left' ? -p.r * 0.55 : p.r * 0.55;
+        this.target = predX + goalSide + err;
       } else {
-        // Ball on opponent half: hold a ready position a bit ahead of our goal.
-        const homeX = this.p.side === 'left' ? CONFIG.WIDTH * 0.28 : CONFIG.WIDTH * 0.72;
-        this.target = Physics.lerp(homeX, predX, 0.35) + err;
+        // Hold a ready line, drift slightly toward play.
+        this.target = Physics.lerp(defendX, predX, 0.30) + err;
       }
-      this.target = Physics.clamp(this.target, this.p.r + 20, CONFIG.WIDTH - this.p.r - 20);
+      this.target = Physics.clamp(this.target, p.r + 16, CONFIG.WIDTH - p.r - 16);
     }
 
-    // Move toward target.
-    const dx = this.target - this.p.x;
-    const dead = 14;
-    if (dx < -dead) input.left = true;
-    else if (dx > dead) input.right = true;
+    // Move toward target with a deadzone.
+    const dx = this.target - p.x;
+    if (dx < -16) input.left = true;
+    else if (dx > 16) input.right = true;
 
-    // Speed scaling: temporarily nudge velocity via input only (Player applies MOVE_SPEED);
-    // we emulate speedMult by sometimes skipping movement when slower than 1.
-    if (c.speedMult < 1 && Math.random() > c.speedMult) { input.left = false; input.right = false; }
-
-    // Jump logic: ball above and close, or to head a high ball toward goal.
-    const dHead = Physics.dist(this.p.x, this.p.y, ball.x, ball.y);
-    const ballAbove = ball.y < this.p.y - this.p.r * 0.4;
-    if (this.p.onGround && ballAbove && dHead < this.p.r + ball.r + 60 && Math.random() < c.jumpChance) {
-      input.jump = true;
+    // Jump to meet a high ball or header it forward.
+    const dHead = Physics.dist(p.x, p.y, ball.x, ball.y);
+    const ballAbove = ball.y < p.y - p.r * 0.35;
+    if (p.onGround && this.jumpCool <= 0 && ballAbove && dHead < p.r + ball.r + 70 &&
+        Math.random() < c.jumpChance) {
+      input.jump = true; this.jumpCool = 0.6;
     }
 
-    // Kick logic: in range + roughly between ball and our goal → smash toward opp goal.
-    const foot = Physics.dist(this.p.footX, this.p.footY, ball.x, ball.y);
-    const facingRight = oppGoalX > this.p.x;
-    // Make sure we are on the correct side of the ball to push it the right way.
-    const goodSide = this.p.side === 'left' ? this.p.x <= ball.x + 10 : this.p.x >= ball.x - 10;
+    // Are we positioned to push the ball toward the opponent goal?
+    const goodSide = p.side === 'left' ? p.x <= ball.x + 12 : p.x >= ball.x - 12;
+    const foot = Physics.dist(p.footX, p.footY, ball.x, ball.y);
+    const reach = foot < CONFIG.KICK_RANGE || dHead < p.r + ball.r + 26;
 
-    if (foot < CONFIG.KICK_RANGE + ball.r && this.kickCooldown <= 0 && goodSide) {
+    if (reach && goodSide) {
       input.wantKick = true;
-      // Power shot when there's a clear lane and decent reaction tier.
-      input.power = Math.random() < (1 - c.kickWindow);
-      this.kickCooldown = 0.3;
-    } else if (foot < CONFIG.KICK_RANGE + ball.r + 40 && goodSide) {
-      // Charge power while approaching.
-      input.shoot = true;
+      input.power = Math.random() < c.aggression * 0.6;
+    } else if (foot < CONFIG.KICK_RANGE + 50 && goodSide) {
+      input.shoot = true; // charge while closing in
     }
 
-    // Ensure facing toward opponent goal when settled.
-    if (!input.left && !input.right) {
-      this.p.facing = facingRight ? 1 : -1;
-    }
-
+    if (!input.left && !input.right) p.facing = (p.side === 'left') ? 1 : -1;
     return input;
   }
 }
