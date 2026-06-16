@@ -19,6 +19,14 @@ const UI = (() => {
     refs.mmCtx = refs.minimap.getContext('2d');
     $('#mute-btn').onclick = () => { const m = !Sound.isMuted(); Sound.setMuted(m); $('#mute-btn').textContent = m ? 'SOUND OFF' : 'SOUND ON'; };
     $('#menu-btn').onclick = () => Game.quitToMenu();
+
+    // Online lobby network handlers.
+    Net.on('joined', () => renderLobby());
+    Net.on('lobby', () => { if (refs.panel.classList.contains('show')) renderLobby(); });
+    Net.on('left', () => { if (refs.panel.classList.contains('show')) renderLobby(); });
+    Net.on('error', m => { const el = document.getElementById('on-status'); if (el) el.textContent = m.m || 'Error'; else toast(m.m || 'Error'); });
+    Net.on('start', data => { refs.panel.classList.remove('show'); Game.startOnline(data); });
+
     showMenu();
   }
 
@@ -45,7 +53,8 @@ const UI = (() => {
             ${['random', 'crew', 'impostor'].map(r => `<button class="rp-b ${SETTINGS.rolePref === r ? 'sel' : ''}" data-r="${r}">${r[0].toUpperCase() + r.slice(1)}</button>`).join('')}
           </div></div>
 
-        <button class="big-btn" id="play-btn">PLAY</button>
+        <button class="big-btn" id="play-btn">PLAY vs BOTS</button>
+        <button class="big-btn online" id="online-btn">PLAY ONLINE</button>
         <div class="menu-sub">
           <button class="sub-btn" id="settings-btn">SETTINGS</button>
           <button class="sub-btn" id="cosmetics-btn">CUSTOMIZE</button>
@@ -56,9 +65,105 @@ const UI = (() => {
     refs.menu.querySelectorAll('.map-b').forEach(b => b.onclick = () => { SETTINGS.mapId = b.dataset.m; Sound.click(); showMenu(); });
     refs.menu.querySelectorAll('.rp-b').forEach(b => b.onclick = () => { SETTINGS.rolePref = b.dataset.r; refs.menu.querySelectorAll('.rp-b').forEach(x => x.classList.remove('sel')); b.classList.add('sel'); Sound.click(); });
     $('#play-btn').onclick = () => { Sound.init(); Sound.resume(); refs.menu.classList.remove('show'); Game.startMatch(); };
+    $('#online-btn').onclick = () => { Sound.init(); Sound.resume(); showOnline(); };
     $('#settings-btn').onclick = showSettings;
     $('#cosmetics-btn').onclick = showCosmetics;
   }
+
+  // -------------------------------------------------------------- online ---
+  function profile() { return { name: (localStorage.getItem('is_name') || 'Player'), color: SETTINGS.color, hat: SETTINGS.hat, pet: SETTINGS.pet }; }
+
+  function showOnline() {
+    const url = localStorage.getItem('is_server') || 'ws://localhost:8080';
+    const name = localStorage.getItem('is_name') || 'Player';
+    refs.panel.innerHTML = `
+      <div class="panel-card">
+        <div class="panel-head"><span>PLAY ONLINE</span><button class="panel-x" id="pn-x">✕</button></div>
+        <div class="online-form">
+          <label>Your name</label><input id="on-name" maxlength="12" value="${name}">
+          <label>Server address</label><input id="on-url" value="${url}">
+          <div id="on-status" class="on-status"></div>
+          <div class="online-actions">
+            <button class="big-btn" id="on-host">HOST GAME</button>
+            <div class="on-join"><input id="on-code" maxlength="4" placeholder="CODE" style="text-transform:uppercase">
+              <button class="big-btn online" id="on-join">JOIN</button></div>
+          </div>
+          <div class="online-note">Run the bundled server first: <code>node server/server.js</code><br>Share the 4-letter code with friends on the same server.</div>
+        </div>
+      </div>`;
+    refs.panel.classList.add('show');
+    $('#pn-x').onclick = () => { refs.panel.classList.remove('show'); };
+    const status = m => { const el = $('#on-status'); if (el) el.textContent = m; };
+
+    async function go(joinCode) {
+      const u = $('#on-url').value.trim(); const nm = $('#on-name').value.trim() || 'Player';
+      localStorage.setItem('is_server', u); localStorage.setItem('is_name', nm);
+      status('Connecting…');
+      try { await Net.connect(u); } catch (e) { status('Could not reach server. Is it running?'); return; }
+      if (joinCode) Net.join(joinCode, profile()); else Net.host(profile());
+    }
+    $('#on-host').onclick = () => go(null);
+    $('#on-join').onclick = () => { const code = $('#on-code').value.trim().toUpperCase(); if (code.length !== 4) { status('Enter a 4-letter code'); return; } go(code); };
+  }
+
+  function renderLobby() {
+    const s = Net.state;
+    refs.panel.innerHTML = `
+      <div class="panel-card">
+        <div class="panel-head"><span>LOBBY · ${s.code}</span><button class="panel-x" id="pn-x">✕</button></div>
+        <div class="lobby-players">${s.players.map(p => `<div class="lp-row">
+          <span class="lp-av" style="--c:${(COLORS.find(c => c.id === p.color) || COLORS[0]).hex}"></span>
+          <span class="lp-name">${p.name}${p.id === s.you ? ' (you)' : ''}</span>
+          ${p.host ? '<span class="lp-host">HOST</span>' : ''}</div>`).join('')}</div>
+        <div class="lobby-info">${s.players.length} player${s.players.length === 1 ? '' : 's'} · map: <b>${Util.mapById(SETTINGS.mapId).label}</b></div>
+        ${s.isHost ? `<button class="big-btn" id="lobby-start">START GAME</button><div class="online-note">Adjust impostors/tasks in SETTINGS before starting.</div>`
+                   : `<div class="online-note">Waiting for the host to start…</div>`}
+        <button class="ghost-btn" id="lobby-leave">LEAVE</button>
+      </div>`;
+    refs.panel.classList.add('show');
+    $('#pn-x').onclick = $('#lobby-leave').onclick = () => { Net.disconnect(); refs.panel.classList.remove('show'); showMenu(); };
+    const sb = $('#lobby-start');
+    if (sb) sb.onclick = () => Net.start({ ...SETTINGS });
+  }
+
+  // --------------------------------------------------------- online meeting ---
+  let _nm = null;
+  function showNetMeeting(m) {
+    _nm = { players: m.players, body: m.body, reporterId: m.reporterId, phase: 'discuss', voted: false, ended: false };
+    drawNetMeeting('Discuss');
+  }
+  function drawNetMeeting(phaseLabel, note) {
+    const host = document.getElementById('meeting-overlay'); const s = Net.state;
+    const me = Game.state.player;
+    host.innerHTML = `
+      <div class="meet-card">
+        <div class="meet-head"><div class="meet-title">EMERGENCY MEETING</div>
+          <div class="meet-sub">${_nm.body ? 'A body was reported' : 'Emergency meeting'}</div>
+          <div class="meet-phase ${_nm.phase}">${phaseLabel}</div></div>
+        <div class="meet-grid">${Game.state.crew.map(c => {
+          const canVote = _nm.phase === 'vote' && c.alive && me.alive && !_nm.voted;
+          return `<div class="seat ${c.isPlayer ? 'me' : ''} ${c.alive ? '' : 'dead'}" ${canVote ? `data-vote="${c.netId}"` : ''}>
+            <div class="seat-av" style="--c:${c.color.hex}">${c.alive ? '' : '<span class="seat-x">✕</span>'}</div>
+            <div class="seat-name">${c.name}${c.isPlayer ? ' (you)' : ''}</div></div>`;
+        }).join('')}</div>
+        <div class="meet-foot">${_nm.phase === 'vote' && me.alive && !_nm.voted ? `<button class="meet-skip" data-vote="skip">SKIP</button>` : ''}
+          <div class="meet-note" id="meet-note">${note || (_nm.phase === 'vote' ? 'Tap a crewmate to vote' : 'Discuss…')}</div></div>
+      </div>`;
+    host.classList.add('show');
+    host.querySelectorAll('[data-vote]').forEach(el => el.onclick = () => { if (_nm.voted) return; _nm.voted = true; Net.vote(el.dataset.vote); Sound.vote(); drawNetMeeting(phaseLabel, 'Vote locked. Waiting…'); });
+  }
+  function netMeetingVotePhase() { if (!_nm) return; _nm.phase = 'vote'; drawNetMeeting('Vote'); }
+  function netMeetingVoted() { /* could show who voted; kept anonymous */ }
+  function netMeetingResult(m) {
+    if (!_nm) return;
+    const ej = m.id ? Game.state.crew.find(c => c.netId === m.id) : null;
+    let msg = !ej ? 'No one was ejected.' : (SETTINGS.confirmEjects ? `${ej.name} was ${m.wasImpostor ? 'An Impostor' : 'not an Impostor'}.` : `${ej.name} was ejected.`);
+    _nm.phase = 'result'; drawNetMeeting('Results', msg);
+    const card = document.querySelector('#meeting-overlay .meet-card');
+    if (ej && card) { const fx = document.createElement('div'); fx.className = 'eject-anim'; fx.innerHTML = `<div class="eject-fig" style="--c:${ej.color.hex}"></div>`; card.appendChild(fx); }
+    Sound.eject();
+  }
+  function hideNetMeeting() { _nm = null; document.getElementById('meeting-overlay').classList.remove('show'); }
 
   // ------------------------------------------------------------ settings ---
   function showSettings() {
@@ -305,5 +410,6 @@ const UI = (() => {
     $('#over-menu').onclick = () => { refs.over.classList.remove('show'); Game.quitToMenu(); };
   }
 
-  return { init, showMenu, showRole, hideRole, showHUD, syncHUD, toast, toggleSabotageMenu, showOver };
+  return { init, showMenu, showRole, hideRole, showHUD, syncHUD, toast, toggleSabotageMenu, showOver,
+           showNetMeeting, netMeetingVotePhase, netMeetingVoted, netMeetingResult, hideNetMeeting };
 })();

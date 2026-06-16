@@ -21,6 +21,7 @@ framework, no backend.
 
 ## ✨ Features
 
+- **🌐 Online multiplayer** — host or join a room with a 4-letter code and play with friends over a real WebSocket server (bundled, dependency-free). Single-player vs bots is still fully available.
 - **🎭 Roles** — each round you're randomly a **Crewmate** or an **Impostor** (or force a side from the menu).
 - **🗺️ 3 original maps** — **Orbital Hub**, **Sky Relay** and **Frost Colony**, each a fully-connected station with its own rooms, corridor layout, vent network, security cameras and sabotage consoles. The map system is data-driven, so more maps drop in cleanly.
 - **🤖 Up to 11 AI bots** that navigate the station, do tasks, kill, vent, **report bodies**, **help fix sabotages**, and **vote** in meetings.
@@ -82,6 +83,30 @@ Open <http://localhost:5050>.
 
 ---
 
+## 🌐 Online multiplayer
+
+A bundled, **dependency-free** WebSocket server (Node built-ins only — no `npm install`) runs the
+authoritative match flow (roles, kills, meetings, votes, sabotage, win conditions); clients handle
+their own movement and task minigames.
+
+```bash
+# 1) start the game server (default port 8080)
+node server/server.js          # or: cd server && npm start
+#    PORT=9000 node server/server.js   # custom port
+
+# 2) serve the game and open it (separate terminal)
+npx serve -l 5050 .
+```
+
+Then, in the game: **PLAY ONLINE** → enter the server address (`ws://localhost:8080` by default) →
+**HOST GAME** to get a 4-letter code, or **JOIN** with a friend's code. The host presses **START**
+(needs 3+ players). To play across the internet, host the server on a reachable machine and share
+`ws://<host>:8080` (use `wss://` behind a TLS proxy).
+
+Run the server's logic test with `cd server && npm test`.
+
+---
+
 ## 📁 Project structure
 
 ```
@@ -96,9 +121,16 @@ Open <http://localhost:5050>.
     ├── entities.js     # Crewmate (player + bots) + Corpse — procedural astronaut art
     ├── tasks.js        # task minigame overlays
     ├── ai.js           # bot behaviour (crew + impostor) and voting heuristics
-    ├── meeting.js      # emergency meeting + voting flow
-    ├── game.js         # engine: loop, camera, vision, interactions, sabotage, win logic
-    └── ui.js           # HUD, menu, role reveal, action buttons, sabotage menu, game-over
+    ├── meeting.js      # emergency meeting + voting flow (single-player)
+    ├── net.js          # online client: WebSocket wrapper + event bus
+    ├── game.js         # engine: loop, camera, vision, interactions, sabotage, win logic, online mode
+    └── ui.js           # HUD, menu, settings, cosmetics, lobby, meetings, game-over
+
+server/                 # online multiplayer (Node, dependency-free)
+├── server.js           # minimal RFC-6455 WebSocket server (http + crypto only)
+├── room.js             # pure, testable game-flow authority (rooms, roles, votes, win)
+├── _test.js            # room-logic integration test (npm test)
+└── package.json
 ```
 
 ---

@@ -24,6 +24,7 @@ const Game = (() => {
     overWin: false, overText: '',
     hintCtx: null, hint: '',
     _accused: null, _taskFlash: 0,
+    online: false, netTaskPct: 0, _posT: 0, _netReady: false,
   };
 
   function init(cv) {
@@ -90,6 +91,74 @@ const Game = (() => {
   }
   function makeTask(spot) { return { def: spot, done: false, step: 0, steps: spot.steps || 1 }; }
 
+  // ----------------------------------------------------- online multiplayer ---
+  function startOnline(data) {
+    setupNet();
+    Object.assign(SETTINGS, data.settings || {});
+    SETTINGS.mapId = data.mapId || SETTINGS.mapId;
+    const map = Util.mapById(SETTINGS.mapId);
+    S.map = map; GameMap.load(map);
+    S.online = true; S.crew = []; S.corpses = [];
+    S.sabotage = { type: null, timer: 0, fixPoints: [] }; S.commsDown = false;
+    S.viewer = null; S.minimapOpen = false; S.killFlash = 0; S.netTaskPct = 0;
+
+    const mates = new Set(data.mates || []);
+    const sp = resolveSpot(map.spawn);
+    (data.players || []).forEach((pl, i) => {
+      const ang = (i / data.players.length) * Math.PI * 2;
+      const isYou = pl.id === Net.state.you;
+      const c = new Crewmate({
+        id: pl.id, name: pl.name, color: COLORS.find(x => x.id === pl.color) || COLORS[0],
+        hat: pl.hat, pet: pl.pet, isPlayer: isYou,
+        isImpostor: isYou ? (data.role === 'impostor') : mates.has(pl.id),
+        x: sp.x + Math.cos(ang) * 100, y: sp.y + Math.sin(ang) * 76,
+        killCooldown: SETTINGS.killCooldown,
+      });
+      c.netId = pl.id; c.target = { x: c.x, y: c.y };
+      if (!isYou) c.ai = null;
+      S.crew.push(c);
+    });
+    S.player = S.crew.find(c => c.isPlayer);
+    // Local player deals its own specific task minigames; the bar comes from the server.
+    const pool = Util.shuffle(S.map.taskSpots.filter(s => s.kind !== 'common'));
+    const commons = Util.shuffle(S.map.taskSpots.filter(s => s.kind === 'common')).slice(0, SETTINGS.commonTasks || 1);
+    const count = data.tasks || SETTINGS.tasksPerCrew;
+    S.player.tasks = S.player.isImpostor ? [] :
+      [...commons, ...pool].slice(0, count).map(makeTask);
+
+    S.phase = 'role'; S.roleRevealT = 3.0;
+    UI.showRole(S.player); UI.showHUD(true); Sound.resume();
+  }
+
+  function crewByNet(id) { return S.crew.find(c => c.netId === id); }
+
+  function setupNet() {
+    if (S._netReady) return; S._netReady = true;
+    Net.on('pos', m => { const c = crewByNet(m.id); if (c && c.alive) { c.target = { x: m.x, y: m.y }; c.facing = m.f || c.facing; c._netMoving = !!m.m; } });
+    Net.on('killed', m => {
+      const v = crewByNet(m.victimId); if (!v || !v.alive) return;
+      v.alive = false; v.x = m.x || v.x; v.y = m.y || v.y; S.corpses.push(new Corpse(v)); Sound.kill();
+      if (v.isPlayer) { S.killFlash = 1.3; S.viewer = null; }
+    });
+    Net.on('meeting', m => { S.phase = 'meeting'; S.viewer = null; S.minimapOpen = false; S.sabotage = { type: null, timer: 0, fixPoints: [] }; S.commsDown = false; Tasks.close(false); UI.showNetMeeting(m); });
+    Net.on('votePhase', m => UI.netMeetingVotePhase(m));
+    Net.on('voted', m => UI.netMeetingVoted(m));
+    Net.on('ejected', m => { const e = crewByNet(m.id); if (e) e.alive = false; UI.netMeetingResult(m, S); });
+    Net.on('resume', () => {
+      S.corpses = []; const sp = resolveSpot(S.map.spawn);
+      S.crew.forEach((c, i) => { if (!c.alive) return; const a = (i / S.crew.length) * Math.PI * 2; c.x = sp.x + Math.cos(a) * 100; c.y = sp.y + Math.sin(a) * 76; c.target = { x: c.x, y: c.y }; });
+      if (S.player.isImpostor) S.player.killCooldown = SETTINGS.killCooldown;
+      S.phase = 'play'; UI.hideNetMeeting();
+    });
+    Net.on('sabotage', m => { S.sabotage = { type: m.kind, timer: m.timer || 0, fixPoints: (m.kind === 'reactor' ? S.map.reactorRooms : [m.kind === 'lights' ? S.map.lightsRoom : S.map.commsRoom]).map(consoleAt) }; if (m.kind === 'comms') S.commsDown = true; Sound.sabotage(); UI.toast('SABOTAGE: ' + m.kind.toUpperCase()); });
+    Net.on('fixed', () => { S.sabotage = { type: null, timer: 0, fixPoints: [] }; S.commsDown = false; Sound.taskDone(); UI.toast('Systems restored'); });
+    Net.on('doors', m => { if (m.room) GameMap.closeDoors(m.room, 12); Sound.sabotage(); });
+    Net.on('tasks', m => { S.netTaskPct = m.pct; });
+    Net.on('over', m => { S.phase = 'over'; const playerWon = S.player.isImpostor ? !m.crewWon : m.crewWon; Sound[playerWon ? 'win' : 'lose'](); UI.showHUD(false); UI.showOver(m.crewWon, m.text, playerWon, S.crew); });
+    Net.on('left', m => { const c = crewByNet(m.id); if (c) { c.alive = false; } });
+    Net.on('close', () => { if (S.online && S.phase !== 'over' && S.phase !== 'menu') { UI.toast('Disconnected from server'); } });
+  }
+
   function resolveSpot(s) { const r = S.map.rooms.find(rr => rr.id === s.room); return { x: r.x + r.w / 2 + (s.dx || 0), y: r.y + r.h / 2 + (s.dy || 0) }; }
   function roomRect(id) { return S.map.rooms.find(r => r.id === id); }
 
@@ -102,7 +171,7 @@ const Game = (() => {
   // -------------------------------------------------------------- helpers ---
   function aliveCrew() { return S.crew.filter(c => c.alive && !c.isImpostor); }
   function aliveImp() { return S.crew.filter(c => c.alive && c.isImpostor); }
-  function taskStats() { let total = 0, done = 0; for (const c of S.crew) if (!c.isImpostor) { for (const t of c.tasks) { total += t.steps; done += t.done ? t.steps : t.step; } } return { total, done }; }
+  function taskStats() { if (S.online) return { total: 100, done: S.netTaskPct }; let total = 0, done = 0; for (const c of S.crew) if (!c.isImpostor) { for (const t of c.tasks) { total += t.steps; done += t.done ? t.steps : t.step; } } return { total, done }; }
 
   function world() {
     return { crew: S.crew, corpses: S.corpses, accused: S._accused, sabotage: S.sabotage,
@@ -146,7 +215,15 @@ const Game = (() => {
   function consoleAt(roomId) { const r = roomRect(roomId); return { room: roomId, x: r.x + 44, y: r.y + r.h - 34 }; }
 
   function triggerSabotage(type) {
-    if (S.sabotage.type || S.sabotageCool > 0 || S.phase !== 'play') return;
+    if (S.phase !== 'play') return;
+    if (S.online) {
+      const r = GameMap.roomAt(S.player.x, S.player.y);
+      if (type === 'doors') { Net.sabotage('doors', r ? r.id : null); }
+      else if (!S.sabotage.type) Net.sabotage(type);
+      S.sabotageCool = SETTINGS.sabotageCooldown;
+      return;
+    }
+    if (S.sabotage.type || S.sabotageCool > 0) return;
     if (type === 'doors') { const r = GameMap.roomAt(S.player.x, S.player.y) || S.map.rooms.find(x => x.id !== S.map.spawn.room); GameMap.closeDoors(r.id, 12); S.sabotageCool = SETTINGS.sabotageCooldown; Sound.sabotage(); UI.toast('Doors sealed: ' + r.name); return; }
     S.sabotage.type = type;
     S.sabotage.timer = type === 'reactor' ? SETTINGS.reactorCountdown : 0;
@@ -186,23 +263,37 @@ const Game = (() => {
   // --------------------------------------------------------------- update ---
   function update(dt) {
     if (S.phase === 'role') { S.roleRevealT -= dt; if (S.roleRevealT <= 0) { UI.hideRole(); S.phase = 'play'; } return; }
-    if (S.phase === 'meeting') { Meeting.update(dt); return; }
+    if (S.phase === 'meeting') { if (!S.online) Meeting.update(dt); return; }
     if (S.phase !== 'play' && S.phase !== 'task') return;
 
     if (S.sabotageCool > 0) S.sabotageCool -= dt;
     GameMap.updateDoors(dt);
 
-    if (S.sabotage.type === 'reactor') { S.sabotage.timer -= dt; if (S.sabotage.timer <= 0) { endGame(false, 'Reactor melted down. Impostors win.'); return; } }
-    if (!S.sabotage.type && aliveImp().length > 0) { S.botSabotageTimer -= dt; if (S.botSabotageTimer <= 0) { triggerSabotageByBot(); S.botSabotageTimer = Util.rand(45, 85); } }
+    if (S.sabotage.type === 'reactor') { S.sabotage.timer -= dt; if (!S.online && S.sabotage.timer <= 0) { endGame(false, 'Reactor melted down. Impostors win.'); return; } }
+    if (!S.online && !S.sabotage.type && aliveImp().length > 0) { S.botSabotageTimer -= dt; if (S.botSabotageTimer <= 0) { triggerSabotageByBot(); S.botSabotageTimer = Util.rand(45, 85); } }
 
     for (const c of S.crew) { c.scanFx = Math.max(0, c.scanFx - dt); c.updatePet(dt); }
     if (S.killFlash > 0) S.killFlash -= dt;
 
     if (S.phase === 'play') handlePlayer(dt);
 
-    const w = world();
-    for (const c of S.crew) { if (c.isPlayer || !c.alive) continue; AI.update(c, dt, w); }
-    updateSabotageCoverage();
+    if (S.online) {
+      // Lerp remote players toward their last reported position.
+      for (const c of S.crew) {
+        if (c.isPlayer || !c.alive || !c.target) continue;
+        const k = Math.min(1, dt * 12);
+        c.x = Util.lerp(c.x, c.target.x, k); c.y = Util.lerp(c.y, c.target.y, k);
+        c.moving = c._netMoving && Util.dist(c.x, c.y, c.target.x, c.target.y) > 2;
+        if (c.moving) c.walkPhase += dt * 11;
+      }
+      // Send our position a few times per second.
+      S._posT += dt;
+      if (S._posT > 0.07 && S.player.alive) { S._posT = 0; Net.pos(S.player.x, S.player.y, S.player.facing, S.player.moving ? 1 : 0); }
+    } else {
+      const w = world();
+      for (const c of S.crew) { if (c.isPlayer || !c.alive) continue; AI.update(c, dt, w); }
+      updateSabotageCoverage();
+    }
 
     if (S.player.isImpostor && S.player.killCooldown > 0) S.player.killCooldown -= dt;
 
@@ -210,7 +301,7 @@ const Game = (() => {
     S.cam.x = Util.clamp(S.player.x - VW / 2, b.minX, Math.max(b.minX, b.maxX - VW));
     S.cam.y = Util.clamp(S.player.y - VH / 2, b.minY, Math.max(b.minY, b.maxY - VH));
 
-    if (checkWin()) return;
+    if (!S.online && checkWin()) return;
     UI.syncHUD(S);
     Input.clear();
   }
@@ -242,14 +333,20 @@ const Game = (() => {
 
     if (Input.consume('use')) {
       if (near.task) openTask(near.task);
+      else if (near.fix) { if (S.online) Net.fix(S.sabotage.type); else fixSabotage(); }
       else if (near.cameras && !S.commsDown) { S.viewer = 'cameras'; Sound.use(); }
       else if (near.admin && !S.commsDown) { S.viewer = 'admin'; Sound.use(); }
       else if (near.vitals && !S.commsDown) { S.viewer = 'vitals'; Sound.use(); }
       else if (near.vent && p.isImpostor) useVent(near.vent);
-      else if (near.emergency && p.usedEmergency < SETTINGS.emergencies && !S.sabotage.type) { p.usedEmergency++; startMeeting(p, null); }
+      else if (near.emergency && (S.online || (p.usedEmergency < SETTINGS.emergencies && !S.sabotage.type))) {
+        if (S.online) Net.emergency(); else { p.usedEmergency++; startMeeting(p, null); }
+      }
     }
-    if (Input.consume('report') && near.body) startMeeting(p, near.body);
-    if (Input.consume('kill') && p.isImpostor && near.victim && p.killCooldown <= 0) { doKill(p, near.victim); p.killCooldown = SETTINGS.killCooldown; }
+    if (Input.consume('report') && near.body) { if (S.online) Net.report(near.body.id); else startMeeting(p, near.body); }
+    if (Input.consume('kill') && p.isImpostor && near.victim && p.killCooldown <= 0) {
+      if (S.online) { Net.kill(near.victim.netId); p.killCooldown = SETTINGS.killCooldown; }
+      else { doKill(p, near.victim); p.killCooldown = SETTINGS.killCooldown; }
+    }
     if (Input.consume('sabotage') && p.isImpostor) UI.toggleSabotageMenu(S);
   }
 
@@ -279,11 +376,11 @@ const Game = (() => {
     Tasks.open(t, () => {
       if (!S.player.isImpostor) {
         t.step++;
-        if (t.step >= t.steps) { t.done = true; Sound.taskDone(); }
+        if (t.step >= t.steps) { t.done = true; Sound.taskDone(); if (S.online) Net.task(); }
         else { Sound.taskOk(); const r = t.def.stepRooms ? roomRect(t.def.stepRooms[t.step]) : null; UI.toast('Next step' + (r ? ': ' + r.name : '')); }
       }
       S.phase = 'play';
-      if (!checkWin()) UI.syncHUD(S);
+      if (!S.online && !checkWin()) UI.syncHUD(S);
     });
   }
 
@@ -365,8 +462,8 @@ const Game = (() => {
   }
 
   return {
-    init, startMatch, world, state: S, renderFrame: render,
-    quitToMenu() { S.phase = 'menu'; UI.showHUD(false); UI.showMenu(); },
+    init, startMatch, startOnline, world, state: S, renderFrame: render,
+    quitToMenu() { if (S.online) { Net.disconnect(); S.online = false; } S.phase = 'menu'; UI.showHUD(false); UI.showMenu(); },
     taskStats, aliveImp, aliveCrew, triggerSabotage, renderCamera,
   };
 })();
