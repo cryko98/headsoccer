@@ -243,77 +243,138 @@ const Game = (() => {
   }
 
   function drawStadium() {
-    // Sky / arena gradient.
-    const sky = ctx.createLinearGradient(0, 0, 0, CONFIG.GROUND_Y);
-    sky.addColorStop(0, '#0a0e1a');
-    sky.addColorStop(0.5, '#142033');
-    sky.addColorStop(1, '#1c2e44');
-    ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.GROUND_Y);
+    const W = CONFIG.WIDTH, H = CONFIG.HEIGHT, HZ = CONFIG.HORIZON;
 
-    // Stand tiers with crowd speckle.
-    ctx.fillStyle = '#0e1828';
-    ctx.fillRect(0, 40, CONFIG.WIDTH, 150);
-    for (let y = 55; y < 180; y += 12) {
-      for (let x = 20; x < CONFIG.WIDTH - 20; x += 10) {
-        const hash = (x * 13 + y * 7) % 17;
-        if (hash < 6) {
-          ctx.fillStyle = ['#3a5a8a', '#8a3a4a', '#caa83a', '#3a8a5a', '#bfc4cc'][hash % 5];
-          ctx.globalAlpha = 0.5;
-          ctx.fillRect(x, y, 4, 4);
+    // --- Arena background above the pitch ---
+    const sky = ctx.createLinearGradient(0, 0, 0, HZ);
+    sky.addColorStop(0, '#070b14');
+    sky.addColorStop(0.45, '#0f1a2c');
+    sky.addColorStop(1, '#1a2b42');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, HZ);
+
+    // Upper tier / roof.
+    ctx.fillStyle = '#0a111d';
+    ctx.fillRect(0, 0, W, 46);
+    // Stadium floodlights.
+    for (const lx of [W * 0.16, W * 0.84]) {
+      const g = ctx.createRadialGradient(lx, 8, 4, lx, 8, 260);
+      g.addColorStop(0, 'rgba(255,255,235,0.16)');
+      g.addColorStop(1, 'rgba(255,255,235,0)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, HZ + 40);
+    }
+
+    // Curved stands with crowd speckle.
+    ctx.fillStyle = '#101a2b';
+    ctx.beginPath();
+    ctx.moveTo(0, 60); ctx.quadraticCurveTo(W / 2, 24, W, 60);
+    ctx.lineTo(W, HZ); ctx.lineTo(0, HZ); ctx.closePath(); ctx.fill();
+    const crowd = ['#3a5a8a', '#8a3a4a', '#c2a83a', '#3a8a5a', '#c4ccd6', '#5a3a8a'];
+    for (let y = 70; y < HZ - 30; y += 9) {
+      const curve = Math.sin((y - 70) / (HZ - 100) * Math.PI) * 0; // flat rows
+      for (let x = 16; x < W - 16; x += 9) {
+        const hash = (x * 13 + y * 7) % 19;
+        if (hash < 7) {
+          ctx.fillStyle = crowd[hash % crowd.length];
+          ctx.globalAlpha = 0.45 + (hash % 3) * 0.12;
+          ctx.fillRect(x, y + curve, 4, 4);
         }
       }
     }
     ctx.globalAlpha = 1;
 
-    // Stadium lights.
-    for (const lx of [CONFIG.WIDTH * 0.2, CONFIG.WIDTH * 0.8]) {
-      const g = ctx.createRadialGradient(lx, 20, 5, lx, 20, 220);
-      g.addColorStop(0, 'rgba(255,255,240,0.18)');
-      g.addColorStop(1, 'rgba(255,255,240,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.GROUND_Y);
-    }
-
-    // LED sponsor board.
-    const board = ctx.createLinearGradient(0, 183, 0, 215);
-    board.addColorStop(0, 'rgba(255,255,255,0.10)');
-    board.addColorStop(1, 'rgba(255,255,255,0.02)');
-    ctx.fillStyle = board;
-    ctx.fillRect(0, 184, CONFIG.WIDTH, 30);
-    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(0, 213, CONFIG.WIDTH, 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.28)';
-    ctx.font = '700 15px "Segoe UI", system-ui, sans-serif';
+    // LED sponsor board just above the grass.
+    const board = ctx.createLinearGradient(0, HZ - 22, 0, HZ + 6);
+    board.addColorStop(0, 'rgba(12,18,30,0.95)');
+    board.addColorStop(1, 'rgba(30,44,64,0.95)');
+    ctx.fillStyle = board; ctx.fillRect(0, HZ - 22, W, 26);
+    ctx.fillStyle = 'rgba(255,255,255,0.30)';
+    ctx.font = '800 14px "Segoe UI", system-ui, sans-serif';
     ctx.textAlign = 'center';
-    const msg = 'WORLD CUP 2026     ·     $GOAL  PLAY TO EARN     ·     HEAD SOCCER     ·     ';
-    ctx.fillText(msg + msg, CONFIG.WIDTH / 2, 204);
+    const msg = 'WORLD CUP 2026      $GOAL  PLAY TO EARN      HEAD SOCCER      ';
+    ctx.fillText(msg + msg, W / 2, HZ - 5);
     ctx.textAlign = 'left';
 
-    // Pitch.
-    const pitch = ctx.createLinearGradient(0, CONFIG.GROUND_Y - 30, 0, CONFIG.HEIGHT);
-    pitch.addColorStop(0, '#2f9e3f');
-    pitch.addColorStop(1, '#1f7a2c');
-    ctx.fillStyle = pitch;
-    ctx.fillRect(0, CONFIG.GROUND_Y - 6, CONFIG.WIDTH, CONFIG.HEIGHT - CONFIG.GROUND_Y + 6);
+    // --- The pitch (big, bright, slight perspective) ---
+    const grass = ctx.createLinearGradient(0, HZ, 0, H);
+    grass.addColorStop(0, '#1f8a35');
+    grass.addColorStop(0.5, '#2cae45');
+    grass.addColorStop(1, '#23932f');
+    ctx.fillStyle = grass;
+    ctx.fillRect(0, HZ, W, H - HZ);
 
-    // Mow stripes.
-    ctx.globalAlpha = 0.12;
-    for (let i = 0; i < 14; i++) {
-      ctx.fillStyle = i % 2 ? '#ffffff' : '#000000';
-      ctx.fillRect(i * (CONFIG.WIDTH / 14), CONFIG.GROUND_Y - 6, CONFIG.WIDTH / 14, CONFIG.HEIGHT);
+    // Centre spotlight glow.
+    const spot = ctx.createRadialGradient(W / 2, (HZ + H) / 2, 40, W / 2, (HZ + H) / 2, W * 0.5);
+    spot.addColorStop(0, 'rgba(180,255,180,0.18)');
+    spot.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = spot; ctx.fillRect(0, HZ, W, H - HZ);
+
+    // Perspective mow stripes (fan out toward the viewer).
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, HZ, W, H - HZ); ctx.clip();
+    const cx = W / 2;
+    for (let i = -8; i <= 8; i++) {
+      ctx.globalAlpha = i % 2 ? 0.07 : 0.0;
+      if (i % 2) {
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        const topX1 = cx + i * 26, topX2 = cx + (i + 1) * 26;
+        const botX1 = cx + i * 90, botX2 = cx + (i + 1) * 90;
+        ctx.moveTo(topX1, HZ); ctx.lineTo(topX2, HZ);
+        ctx.lineTo(botX2, H); ctx.lineTo(botX1, H);
+        ctx.closePath(); ctx.fill();
+      }
     }
     ctx.globalAlpha = 1;
+    ctx.restore();
 
-    // Centre line + circle + halfway dot.
-    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    // --- White markings (perspective) ---
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
     ctx.lineWidth = 3;
+    // Outer boundary (trapezoid).
+    const ml = 34, mr = W - 34;
+    const topInset = 96;
     ctx.beginPath();
-    ctx.moveTo(CONFIG.WIDTH / 2, CONFIG.GROUND_Y - 4);
-    ctx.lineTo(CONFIG.WIDTH / 2, CONFIG.HEIGHT);
-    ctx.stroke();
+    ctx.moveTo(ml + topInset, HZ + 8);
+    ctx.lineTo(mr - topInset, HZ + 8);
+    ctx.lineTo(mr, H - 8);
+    ctx.lineTo(ml, H - 8);
+    ctx.closePath(); ctx.stroke();
+
+    // Halfway line.
     ctx.beginPath();
-    ctx.ellipse(CONFIG.WIDTH / 2, CONFIG.HEIGHT - 30, 70, 28, 0, Math.PI, Math.PI * 2);
+    ctx.moveTo(cx, HZ + 8); ctx.lineTo(cx, H - 8); ctx.stroke();
+    // Centre circle (perspective ellipse) + spot.
+    const ccy = (HZ + H) / 2 + 20;
+    ctx.beginPath(); ctx.ellipse(cx, ccy, 78, 30, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.beginPath(); ctx.ellipse(cx, ccy, 4, 2, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Penalty boxes near each goal (perspective).
+    drawPenaltyBox(ctx, 'left', HZ, topInset, ml);
+    drawPenaltyBox(ctx, 'right', HZ, topInset, mr);
+  }
+
+  function drawPenaltyBox(ctx, side, HZ, topInset, edge) {
+    const H = CONFIG.HEIGHT;
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 2.5;
+    const dir = side === 'left' ? 1 : -1;
+    const topY = HZ + 8, botY = H - 8;
+    const topInner = side === 'left' ? edge + topInset + 110 : edge - topInset - 110;
+    const botInner = side === 'left' ? edge + 200 : edge - 200;
+    const topEdge = side === 'left' ? edge + topInset : edge - topInset;
+    const botEdge = side === 'left' ? edge : edge;
+    ctx.beginPath();
+    ctx.moveTo(topEdge, topY);
+    ctx.lineTo(topInner, topY);
+    ctx.lineTo(botInner, botY);
+    ctx.lineTo(botEdge, botY);
     ctx.stroke();
+    // Penalty spot.
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    const sx = side === 'left' ? edge + 86 : edge - 86;
+    ctx.beginPath(); ctx.ellipse(sx, (topY + botY) / 2 + 20, 3, 1.6, 0, 0, Math.PI * 2); ctx.fill();
   }
 
   function drawGoalText() {
@@ -366,6 +427,7 @@ const Game = (() => {
   return {
     init, startMatch,
     state,
+    renderFrame: render,   // draw a single frame on demand (used for headless checks)
     getTime: () => Math.ceil(state.timeLeft),
     quitToMenu() { state.screen = 'menu'; state.running = false; UI.showHUD(false); UI.showMenu(); },
     nextTournamentMatch() {

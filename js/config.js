@@ -7,19 +7,23 @@ const CONFIG = {
   // --- Canvas / world ---
   WIDTH: 1000,
   HEIGHT: 560,
-  GROUND_Y: 476,          // y of the pitch surface
-  GOAL_WIDTH: 64,
-  GOAL_HEIGHT: 200,
-  WALL_PAD: 8,
+  HORIZON: 250,           // where the crowd meets the green pitch
+  GROUND_Y: 432,          // play baseline (feet / ball rest); pitch continues below
+  BODY_H: 22,             // tiny body height drawn under the head
+  GOAL_WIDTH: 70,
+  GOAL_HEIGHT: 132,       // goal stands ON the pitch (crossbar at GROUND_Y - this)
+  GOAL_DEPTH: 30,         // visual 3D net depth
+  WALL_PAD: 10,
 
   // --- Physics (tuned for a heavier, more controllable ball) ---
   GRAVITY: 1650,          // px / s^2  (was 2100 — floatier, easier to read)
   AIR_FRICTION: 0.9965,
   GROUND_FRICTION: 0.82,
-  BALL_RESTITUTION: 0.60, // less bouncy
-  BALL_RADIUS: 24,
+  BALL_RESTITUTION: 0.62, // less bouncy
+  BALL_RADIUS: 22,
   MAX_BALL_SPEED: 880,    // hard clamp so shots stay readable
-  PLAYER_RADIUS: 47,
+  BALL_LIVELINESS: 0.6,   // s of near-rest before a gentle nudge keeps it moving
+  PLAYER_RADIUS: 52,
   MAX_DT: 1 / 30,
 
   // --- Player movement ---
@@ -58,9 +62,9 @@ const TEAMS = [
   { id: 'usa', name: 'USA',         primary: '#1c3f94', secondary: '#ffffff', accent: '#bf0a30', skin: '#e8b48c', hair: '#5b3a22', hairStyle: 2, flag: { type: 'usa' } },
   { id: 'mex', name: 'Mexico',      primary: '#006847', secondary: '#ffffff', accent: '#ce1126', skin: '#c98a5e', hair: '#1c130d', hairStyle: 0, flag: { type: 'v3', c: ['#006847', '#ffffff', '#ce1126'] } },
   { id: 'can', name: 'Canada',      primary: '#d52b1e', secondary: '#ffffff', accent: '#d52b1e', skin: '#e0a878', hair: '#7a4a26', hairStyle: 5, flag: { type: 'canada' } },
-  { id: 'arg', name: 'Argentina',   primary: '#74acdf', secondary: '#ffffff', accent: '#f6b40e', skin: '#d99a6c', hair: '#1c130d', hairStyle: 0, flag: { type: 'h3s', c: ['#74acdf', '#ffffff', '#74acdf'], em: '#f6b40e' } },
+  { id: 'arg', name: 'Argentina',   primary: '#74acdf', secondary: '#ffffff', accent: '#f6b40e', skin: '#d99a6c', hair: '#241712', hairStyle: 2, beard: true, flag: { type: 'h3s', c: ['#74acdf', '#ffffff', '#74acdf'], em: '#f6b40e' } },
   { id: 'bra', name: 'Brazil',      primary: '#ffdf00', secondary: '#009b3a', accent: '#002776', skin: '#8d5a3c', hair: '#0e0a06', hairStyle: 3, flag: { type: 'brazil' } },
-  { id: 'fra', name: 'France',      primary: '#0055a4', secondary: '#ffffff', accent: '#ef4135', skin: '#6f4a32', hair: '#0e0a06', hairStyle: 1, flag: { type: 'v3', c: ['#0055a4', '#ffffff', '#ef4135'] } },
+  { id: 'fra', name: 'France',      primary: '#0055a4', secondary: '#ffffff', accent: '#ef4135', skin: '#6f4a32', hair: '#0e0a06', hairStyle: 1, beard: true, flag: { type: 'v3', c: ['#0055a4', '#ffffff', '#ef4135'] } },
   { id: 'eng', name: 'England',     primary: '#ffffff', secondary: '#1d3a8a', accent: '#cf081f', skin: '#e0a878', hair: '#caa06a', hairStyle: 2, flag: { type: 'cross', c: ['#ffffff', '#cf081f'] } },
   { id: 'esp', name: 'Spain',       primary: '#c60b1e', secondary: '#ffc400', accent: '#ffc400', skin: '#d99a6c', hair: '#1c130d', hairStyle: 0, flag: { type: 'h3', c: ['#c60b1e', '#ffc400', '#c60b1e'], ratio: [1, 2, 1] } },
   { id: 'ger', name: 'Germany',     primary: '#1a1a1a', secondary: '#ffffff', accent: '#dd0000', skin: '#e0a878', hair: '#c8a25a', hairStyle: 2, flag: { type: 'h3', c: ['#111111', '#dd0000', '#ffce00'] } },
@@ -69,8 +73,8 @@ const TEAMS = [
   { id: 'jpn', name: 'Japan',       primary: '#0a2987', secondary: '#ffffff', accent: '#bc002d', skin: '#e6bd8f', hair: '#0a0a0a', hairStyle: 0, flag: { type: 'disc', c: ['#ffffff', '#bc002d'] } },
   { id: 'kor', name: 'Korea Rep.',  primary: '#c8102e', secondary: '#ffffff', accent: '#003478', skin: '#e6bd8f', hair: '#0a0a0a', hairStyle: 0, flag: { type: 'korea' } },
   { id: 'mar', name: 'Morocco',     primary: '#c1272d', secondary: '#006233', accent: '#006233', skin: '#a9744f', hair: '#0e0a06', hairStyle: 0, flag: { type: 'star', c: ['#c1272d', '#006233'] } },
-  { id: 'cro', name: 'Croatia',     primary: '#ff0000', secondary: '#ffffff', accent: '#171796', skin: '#d99a6c', hair: '#5b3a22', hairStyle: 0, flag: { type: 'h3', c: ['#ff0000', '#ffffff', '#171796'] } },
-  { id: 'bel', name: 'Belgium',     primary: '#e30613', secondary: '#1a1a1a', accent: '#fdda24', skin: '#e0a878', hair: '#3a2414', hairStyle: 0, flag: { type: 'v3', c: ['#111111', '#fdda24', '#e30613'] } },
+  { id: 'cro', name: 'Croatia',     primary: '#ff0000', secondary: '#ffffff', accent: '#171796', skin: '#d99a6c', hair: '#5b3a22', hairStyle: 0, beard: true, flag: { type: 'h3', c: ['#ff0000', '#ffffff', '#171796'] } },
+  { id: 'bel', name: 'Belgium',     primary: '#e30613', secondary: '#1a1a1a', accent: '#fdda24', skin: '#e0a878', hair: '#3a2414', hairStyle: 2, beard: true, flag: { type: 'v3', c: ['#111111', '#fdda24', '#e30613'] } },
 ];
 
 // Difficulty presets used by the AI controller.
